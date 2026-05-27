@@ -1,0 +1,8 @@
+{
+  "name": "@collab/collab",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo 'a configurer phase 2'",
+    "build": "tsc"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@collab/api",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^10.1.0",
+    "@prisma/client": "4",
+    "bcrypt": "^6.0.0",
+    "fastify": "^5.8.5",
+    "pg": "^7.18.2",
+    "prisma": "4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3"
+  }
+}
