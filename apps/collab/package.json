@@ -2,7 +2,27 @@
   "name": "@collab/collab",
   "version": "0.1.0",
   "scripts": {
-    "dev": "echo 'a configurer phase 2'",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc"
-  }
+  },
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.0",
+    "jsonwebtoken": "^9.0.3",
+    "undici-types": "^7.24.6",
+    "ws": "^8.21.0",
+    "y-websocket": "^1.5.4",
+    "yjs": "^13.6.31"
+  },
+  "description": ""
 }
