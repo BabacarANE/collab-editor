@@ -1,15 +1,35 @@
 import { useState } from 'react'
 import { useAuthStore } from './store/authStore'
 import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
 import EditorPage from './pages/EditorPage'
+
+type View = 'login' | 'dashboard' | 'editor'
 
 export default function App() {
   const user = useAuthStore((s) => s.user)
-  const [loggedIn, setLoggedIn] = useState(!!user)
+  const [view, setView] = useState<View>(user ? 'dashboard' : 'login')
+  const [currentDocId, setCurrentDocId] = useState<string | null>(null)
 
-  if (!loggedIn) {
-    return <LoginPage onLogin={() => setLoggedIn(true)} />
+  if (view === 'login') {
+    return <LoginPage onLogin={() => setView('dashboard')} />
   }
 
-  return <EditorPage />
+  if (view === 'editor' && currentDocId) {
+    return (
+      <EditorPage
+        docId={currentDocId}
+        onBack={() => setView('dashboard')}
+      />
+    )
+  }
+
+  return (
+    <DashboardPage
+      onOpenDocument={(docId) => {
+        setCurrentDocId(docId)
+        setView('editor')
+      }}
+    />
+  )
 }

@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 import { authRoutes } from './routes/auth'
 import { documentRoutes } from './routes/documents'
+import { workspaceRoutes } from './routes/workspaces'  // ← ajouter
 
 const app = Fastify({ logger: true })
 
@@ -14,6 +15,7 @@ app.register(jwt, { secret: process.env.JWT_SECRET ?? 'dev_secret' })
 app.get('/health', async () => ({ status: 'ok' }))
 app.register(authRoutes, { prefix: '/api/auth' })
 app.register(documentRoutes, { prefix: '/api/documents' })
+app.register(workspaceRoutes, { prefix: '/api/workspaces' })  // ← ajouter
 
 const start = async () => {
   try {
