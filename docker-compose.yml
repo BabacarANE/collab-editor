@@ -98,6 +98,7 @@ services:
       - "4000:4000"
     volumes:
       - .:/app
+      - collab_node_modules:/app/apps/collab/node_modules
     environment:
       JWT_SECRET: change_me_in_production
       COLLAB_PORT: 4000
@@ -117,3 +118,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  collab_node_modules:

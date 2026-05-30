@@ -6,7 +6,6 @@ import { setupWSConnection } from 'y-websocket/bin/utils'
 const PORT = Number(process.env.COLLAB_PORT) || 4000
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev_secret'
 
-// Créer un serveur HTTP de base (requis par ws)
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200)
@@ -20,13 +19,10 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server })
 
 wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
-  // Extraire le token JWT depuis l'URL
-  // Le client se connectera avec : ws://localhost:4000/?token=xxx&docId=yyy
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`)
   const token = url.searchParams.get('token')
-  const docId = url.searchParams.get('docId')
+  const docId = url.pathname.slice(1)
 
-  // Vérifier le JWT
   if (!token) {
     console.log('[collab] Connexion refusée — token manquant')
     ws.close(4001, 'Token manquant')
@@ -42,9 +38,21 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     return
   }
 
-  // Déléguer à y-websocket qui gère les rooms Yjs automatiquement
-  // Le docId devient le nom de la room
-  setupWSConnection(ws, req)
+  // Écouter les erreurs sur le socket
+  ws.on('error', (err) => {
+    console.error('[collab] Erreur WebSocket:', err.message)
+  })
+
+  ws.on('close', (code, reason) => {
+    console.log(`[collab] Connexion fermée — code: ${code}, raison: ${reason.toString()}`)
+  })
+
+  try {
+    setupWSConnection(ws, req)
+    console.log('[collab] setupWSConnection OK pour docId:', docId)
+  } catch (err: any) {
+    console.error('[collab] Erreur setupWSConnection:', err.message)
+  }
 })
 
 server.listen(PORT, () => {
