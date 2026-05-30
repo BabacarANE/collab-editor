@@ -28,13 +28,17 @@ export default function EditorPage({ docId, onBack }: Props) {
   const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
   const [ydoc] = useState(() => new Y.Doc())
   const providerRef = useRef<WebsocketProvider | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Charger le titre
   useEffect(() => {
     api.get(`/api/documents/${docId}`)
       .then(res => setDocTitle(res.data.title))
       .catch(() => setDocTitle('Document'))
   }, [docId])
 
+  // Connexion WebSocket + awareness
   useEffect(() => {
     const provider = new WebsocketProvider(
       'ws://localhost:4000',
@@ -68,6 +72,7 @@ export default function EditorPage({ docId, onBack }: Props) {
     }
   }, [])
 
+  // Initialiser l'éditeur
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ history: false, undoRedo: false }),
@@ -75,8 +80,52 @@ export default function EditorPage({ docId, onBack }: Props) {
     ]
   })
 
+  // Auto-save toutes les 5s après inactivité
+  useEffect(() => {
+    if (!editor) return
+
+    const handleUpdate = () => {
+      setSaveStatus('unsaved')
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(async () => {
+        setSaveStatus('saving')
+        try {
+          const html = editor.getHTML()
+          await api.patch(`/api/documents/${docId}/content`, { content: html })
+          setSaveStatus('saved')
+        } catch {
+          setSaveStatus('unsaved')
+        }
+      }, 5000)
+    }
+
+    editor.on('update', handleUpdate)
+
+    return () => {
+      editor.off('update', handleUpdate)
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [editor, docId])
+
   const statusColor = { connecting: '#f59e0b', connected: '#10b981', disconnected: '#ef4444' }[status]
   const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
+
+  const exportDocument = async (format: 'html' | 'md') => {
+    try {
+      const res = await api.get(`/api/documents/${docId}/export?format=${format}`, {
+        responseType: 'blob'
+      })
+      const ext = format === 'html' ? 'html' : 'md'
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${docTitle}.${ext}`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      alert('Erreur export')
+    }
+  }
 
   return (
     <div style={{ fontFamily: 'sans-serif' }}>
@@ -104,15 +153,23 @@ export default function EditorPage({ docId, onBack }: Props) {
             ))}
           </div>
 
+          {/* Statut sauvegarde */}
+          <span style={{ fontSize: 12, color: saveStatus === 'saved' ? '#10b981' : saveStatus === 'saving' ? '#f59e0b' : '#999' }}>
+            {saveStatus === 'saved' ? '✓ Sauvegardé' : saveStatus === 'saving' ? 'Sauvegarde...' : '● Non sauvegardé'}
+          </span>
+
+          {/* Indicateur sync WebSocket */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor }} />
             <span style={{ fontSize: 13, color: '#666' }}>{statusLabel}</span>
           </div>
+
           <span style={{ color: '#666', fontSize: 14 }}>{user?.email}</span>
           <button onClick={logout} style={{ padding: '6px 12px', cursor: 'pointer' }}>Déconnexion</button>
         </div>
       </div>
 
+      {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, padding: '8px 24px', borderBottom: '1px solid #eee' }}>
         <button onClick={() => editor?.chain().focus().toggleBold().run()}
           style={{ fontWeight: editor?.isActive('bold') ? 'bold' : 'normal', padding: '4px 10px' }}>G</button>
@@ -126,8 +183,21 @@ export default function EditorPage({ docId, onBack }: Props) {
           style={{ padding: '4px 10px' }}>Liste</button>
         <button onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
           style={{ padding: '4px 10px' }}>Code</button>
+          
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={() => exportDocument('html')}
+            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
+            ↓ HTML
+          </button>
+          <button onClick={() => exportDocument('md')}
+            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
+            ↓ Markdown
+          </button>
+        </div>
+      
       </div>
 
+      {/* Zone d'édition */}
       <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
         <EditorContent editor={editor} />
       </div>

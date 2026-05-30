@@ -8,7 +8,10 @@ import { workspaceRoutes } from './routes/workspaces'  // ← ajouter
 
 const app = Fastify({ logger: true })
 
-app.register(cors, { origin: ['http://localhost:5173', 'http://localhost:5174'] })
+app.register(cors, {
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']
+})
 app.register(helmet)
 app.register(jwt, { secret: process.env.JWT_SECRET ?? 'dev_secret' })
 

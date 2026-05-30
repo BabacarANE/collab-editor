@@ -155,4 +155,94 @@ export async function documentRoutes(app: FastifyInstance) {
 
     return reply.status(204).send()
   })
+  // PATCH /api/documents/:id/content — Sauvegarder le contenu
+  app.patch('/:id/content', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    const { content } = request.body as { content: string }
+
+    // Vérifier que l'utilisateur a le droit d'éditer
+    const document = await prisma.document.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId, role: { in: ['EDITOR', 'OWNER'] } } } }
+        ]
+      }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé ou accès refusé' })
+    }
+
+    await prisma.document.update({
+      where: { id },
+      data: { content }
+    })
+
+    return reply.status(204).send()
+  })
+
+  // GET /api/documents/:id/export?format=html
+  // GET /api/documents/:id/export?format=md
+  app.get('/:id/export', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    const { format } = request.query as { format?: string }
+
+    const document = await prisma.document.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId } } }
+        ]
+      }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé' })
+    }
+
+    const content = document.content ?? ''
+    const title = document.title
+
+    if (format === 'html') {
+      const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; line-height: 1.6; }
+    h1, h2, h3 { margin-top: 1.5em; }
+    code { background: #f1f3f4; padding: 2px 6px; border-radius: 4px; }
+    pre { background: #f1f3f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  ${content}
+</body>
+</html>`
+
+      reply.header('Content-Type', 'text/html; charset=utf-8')
+      reply.header('Content-Disposition', `attachment; filename="${title}.html"`)
+      return reply.send(html)
+    }
+
+    if (format === 'md') {
+      const { NodeHtmlMarkdown } = await import('node-html-markdown')
+      const markdown = `# ${title}\n\n${NodeHtmlMarkdown.translate(content)}`
+
+      reply.header('Content-Type', 'text/markdown; charset=utf-8')
+      reply.header('Content-Disposition', `attachment; filename="${title}.md"`)
+      return reply.send(markdown)
+    }
+
+    return reply.status(400).send({ error: 'Format non supporté. Utiliser ?format=html ou ?format=md' })
+  })
 }
