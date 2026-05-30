@@ -70,7 +70,7 @@ export default function EditorPage({ docId, onBack }: Props) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: false }),
+      StarterKit.configure({ history: false, undoRedo: false }),
       Collaboration.configure({ document: ydoc })
     ]
   })
