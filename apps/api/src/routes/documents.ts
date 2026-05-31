@@ -56,6 +56,7 @@ export async function documentRoutes(app: FastifyInstance) {
       select: {
         id: true,
         title: true,
+        content: true,
         workspaceId: true,
         ownerId: true,
         createdAt: true,

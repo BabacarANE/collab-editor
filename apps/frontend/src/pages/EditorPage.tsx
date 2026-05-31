@@ -39,6 +39,8 @@ export default function EditorPage({ docId, onBack }: Props) {
   const providerRef = useRef<WebsocketProvider | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+
 
   // Charger le titre
   useEffect(() => {
@@ -66,6 +68,24 @@ export default function EditorPage({ docId, onBack }: Props) {
       setStatus(event.status as 'connecting' | 'connected' | 'disconnected')
     })
 
+    // Quand Yjs est synchronisé avec le serveur
+    provider.on('synced', async () => {
+      const xmlFragment = ydoc.getXmlFragment('default')
+      const isEmpty = xmlFragment.length === 0
+
+      if (isEmpty) {
+        try {
+          const res = await api.get(`/api/documents/${docId}`)
+          const savedContent = res.data.content
+          if (savedContent && savedContent.trim() !== '' && editorRef.current) {
+            editorRef.current.commands.setContent(savedContent)
+          }
+        } catch {
+          console.error('Erreur chargement contenu initial')
+        }
+      }
+    })
+
     const updateUsers = () => {
       const states = Array.from(provider.awareness.getStates().values()) as any[]
       const users = states
@@ -88,6 +108,13 @@ export default function EditorPage({ docId, onBack }: Props) {
       Collaboration.configure({ document: ydoc })
     ]
   })
+
+  // Synchroniser la ref avec l'éditeur
+  useEffect(() => {
+    if (editor) {
+      (editorRef as any).current = editor
+    }
+  }, [editor])
 
   // Auto-save toutes les 5s après inactivité
   useEffect(() => {
