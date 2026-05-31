@@ -300,6 +300,111 @@ export async function documentRoutes(app: FastifyInstance) {
     return reply.send(snapshot)
   })
 
+  // POST /api/documents/:id/comments — Créer un commentaire
+  app.post('/:id/comments', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    const { content, parentId } = request.body as { content: string; parentId?: string }
+
+    if (!content?.trim()) {
+      return reply.status(400).send({ error: 'Le contenu du commentaire est requis' })
+    }
+
+    const document = await prisma.document.findFirst({
+      where: { id, deletedAt: null }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé' })
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        documentId: id,
+        authorId: userId,
+        content: content.trim(),
+        parentId: parentId ?? null
+      },
+      select: {
+        id: true,
+        content: true,
+        resolved: true,
+        parentId: true,
+        createdAt: true,
+        author: { select: { id: true, email: true } }
+      }
+    })
+
+    return reply.status(201).send(comment)
+  })
+
+  // GET /api/documents/:id/comments — Lister les commentaires
+  app.get('/:id/comments', { preHandler: authenticate }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+
+    const comments = await prisma.comment.findMany({
+      where: { documentId: id, parentId: null },
+      select: {
+        id: true,
+        content: true,
+        resolved: true,
+        createdAt: true,
+        author: { select: { id: true, email: true } },
+        replies: {
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: { select: { id: true, email: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    return reply.send(comments)
+  })
+
+  // PATCH /api/documents/:id/comments/:commentId/resolve — Résoudre un commentaire
+  app.patch('/:id/comments/:commentId/resolve', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { commentId } = request.params as { id: string; commentId: string }
+
+    const comment = await prisma.comment.findFirst({
+      where: { id: commentId, authorId: userId }
+    })
+
+    if (!comment) {
+      return reply.status(404).send({ error: 'Commentaire non trouvé ou accès refusé' })
+    }
+
+    await prisma.comment.update({
+      where: { id: commentId },
+      data: { resolved: true }
+    })
+
+    return reply.status(204).send()
+  })
+
+  // DELETE /api/documents/:id/comments/:commentId — Supprimer un commentaire
+  app.delete('/:id/comments/:commentId', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { commentId } = request.params as { id: string; commentId: string }
+
+    const comment = await prisma.comment.findFirst({
+      where: { id: commentId, authorId: userId }
+    })
+
+    if (!comment) {
+      return reply.status(404).send({ error: 'Commentaire non trouvé ou accès refusé' })
+    }
+
+    await prisma.comment.delete({ where: { id: commentId } })
+
+    return reply.status(204).send()
+  })
+
   // GET /api/documents/:id/export?format=html
   // GET /api/documents/:id/export?format=md
   app.get('/:id/export', { preHandler: authenticate }, async (request, reply) => {

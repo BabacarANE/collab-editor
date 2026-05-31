@@ -18,6 +18,7 @@ model User {
   refreshTokens   RefreshToken[]
   workspaces      WorkspaceMember[]
   snapshots  Snapshot[]
+  comments   Comment[]
 }
 
 model Workspace {
@@ -54,6 +55,7 @@ model Document {
   permissions Permission[]
   shareLinks  ShareLink[]
   snapshots  Snapshot[]
+  comments   Comment[]
 }
 
 model Permission {
@@ -100,6 +102,23 @@ model Snapshot {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   author   User     @relation(fields: [createdBy], references: [id])
 }
+
+model Comment {
+  id         String   @id @default(uuid())
+  documentId String
+  authorId   String
+  content    String
+  parentId   String?
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id])
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+}
+
 enum DocumentRole {
   OWNER
   EDITOR

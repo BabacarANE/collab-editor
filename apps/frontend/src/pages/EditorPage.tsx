@@ -31,6 +31,11 @@ export default function EditorPage({ docId, onBack }: Props) {
   const [snapshots, setSnapshots] = useState<{ id: string; name: string; createdAt: string; author: { email: string } }[]>([])
   const [snapshotName, setSnapshotName] = useState('')
   const [previewSnapshot, setPreviewSnapshot] = useState<{ name: string; content: string; createdAt: string } | null>(null)
+  const [showComments, setShowComments] = useState(false)
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [replyTo, setReplyTo] = useState<{ id: string; email: string } | null>(null)
+  const [replyContent, setReplyContent] = useState('')
   const providerRef = useRef<WebsocketProvider | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -161,6 +166,47 @@ export default function EditorPage({ docId, onBack }: Props) {
     }
   }
 
+  const loadComments = async () => {
+    try {
+      const res = await api.get(`/api/documents/${docId}/comments`)
+      setComments(res.data)
+    } catch {
+      console.error('Erreur chargement commentaires')
+    }
+  }
+
+  const postComment = async () => {
+    if (!newComment.trim()) return
+    try {
+      await api.post(`/api/documents/${docId}/comments`, { content: newComment.trim() })
+      setNewComment('')
+      loadComments()
+    } catch {
+      alert('Erreur envoi commentaire')
+    }
+  }
+
+  const postReply = async (parentId: string) => {
+    if (!replyContent.trim()) return
+    try {
+      await api.post(`/api/documents/${docId}/comments`, { content: replyContent.trim(), parentId })
+      setReplyContent('')
+      setReplyTo(null)
+      loadComments()
+    } catch {
+      alert('Erreur envoi réponse')
+    }
+  }
+
+  const resolveComment = async (commentId: string) => {
+    try {
+      await api.patch(`/api/documents/${docId}/comments/${commentId}/resolve`)
+      loadComments()
+    } catch {
+      alert('Erreur résolution commentaire')
+    }
+  }
+
   return (
     <div style={{ fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid #eee' }}>
@@ -233,6 +279,11 @@ export default function EditorPage({ docId, onBack }: Props) {
           style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showHistory ? '#e8f0fe' : 'white' }}>
           🕐 Versions
         </button>
+        <button
+          onClick={() => { setShowComments(!showComments); if (!showComments) loadComments() }}
+          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showComments ? '#e8f0fe' : 'white' }}>
+          💬 Commentaires
+        </button>
       
       </div>
 
@@ -248,6 +299,9 @@ export default function EditorPage({ docId, onBack }: Props) {
           {showHistory && (
             <div style={{ width: 300, borderLeft: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>🕐 Historique des versions</div>
+
+
+              
 
               {/* Créer un snapshot */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -282,7 +336,110 @@ export default function EditorPage({ docId, onBack }: Props) {
                 ))
               )}
             </div>
+
+
+
           )}
+          {/* Panel commentaires */}
+          {showComments && (
+            <div style={{ width: 300, borderLeft: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>💬 Commentaires</div>
+
+              {/* Nouveau commentaire */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <textarea
+                  placeholder="Ajouter un commentaire..."
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  rows={3}
+                  style={{ padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ddd', resize: 'none' }}
+                />
+                <button onClick={postComment}
+                  style={{ padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
+                  + Commenter
+                </button>
+              </div>
+
+              <hr style={{ margin: '4px 0' }} />
+
+              {/* Liste des commentaires */}
+              {comments.length === 0 ? (
+                <p style={{ color: '#999', fontSize: 13 }}>Aucun commentaire</p>
+              ) : (
+                comments.map(c => (
+                  <div key={c.id} style={{
+                    padding: '10px 12px', border: '1px solid #eee', borderRadius: 8,
+                    background: c.resolved ? '#f8f9fa' : 'white',
+                    opacity: c.resolved ? 0.7 : 1
+                  }}>
+                    {/* Header commentaire */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#1a73e8' }}>{c.author.email}</span>
+                      <span style={{ fontSize: 11, color: '#999' }}>{new Date(c.createdAt).toLocaleDateString('fr-FR')}</span>
+                    </div>
+
+                    {/* Contenu */}
+                    <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.5 }}>{c.content}</p>
+
+                    {/* Réponses */}
+                    {c.replies?.length > 0 && (
+                      <div style={{ marginLeft: 12, borderLeft: '2px solid #eee', paddingLeft: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {c.replies.map((r: any) => (
+                          <div key={r.id}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>{r.author.email} </span>
+                            <span style={{ fontSize: 12 }}>{r.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    {!c.resolved && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button onClick={() => setReplyTo(c)}
+                          style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'none' }}>
+                          Répondre
+                        </button>
+                        <button onClick={() => resolveComment(c.id)}
+                          style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #10b981', color: '#10b981', background: 'none' }}>
+                          ✓ Résoudre
+                        </button>
+                      </div>
+                    )}
+                    {c.resolved && <span style={{ fontSize: 11, color: '#10b981' }}>✓ Résolu</span>}
+
+                    {/* Zone de réponse */}
+                    {replyTo?.id === c.id && (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <textarea
+                          placeholder="Votre réponse..."
+                          value={replyContent}
+                          onChange={e => setReplyContent(e.target.value)}
+                          rows={2}
+                          style={{ padding: '4px 8px', fontSize: 12, borderRadius: 4, border: '1px solid #ddd', resize: 'none' }}
+                        />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => postReply(c.id)}
+                            style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
+                            Envoyer
+                          </button>
+                          <button onClick={() => setReplyTo(null)}
+                            style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'none' }}>
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+
+
+
+
         </div>
 
         {/* Modal preview snapshot */}
