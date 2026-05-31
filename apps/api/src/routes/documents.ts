@@ -185,6 +185,121 @@ export async function documentRoutes(app: FastifyInstance) {
     return reply.status(204).send()
   })
 
+// POST /api/documents/:id/snapshots — Créer un snapshot nommé
+  app.post('/:id/snapshots', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    const { name } = request.body as { name?: string }
+
+    const document = await prisma.document.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId, role: { in: ['EDITOR', 'OWNER'] } } } }
+        ]
+      }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé ou accès refusé' })
+    }
+
+    if (!document.content) {
+      return reply.status(400).send({ error: 'Document vide — impossible de créer un snapshot' })
+    }
+
+    const snapshot = await prisma.snapshot.create({
+      data: {
+        documentId: id,
+        name: name?.trim() || `Version du ${new Date().toLocaleDateString('fr-FR')}`,
+        content: document.content,
+        createdBy: userId
+      },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        author: { select: { email: true } }
+      }
+    })
+
+    return reply.status(201).send(snapshot)
+  })
+
+  // GET /api/documents/:id/snapshots — Lister les snapshots
+  app.get('/:id/snapshots', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+
+    const document = await prisma.document.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId } } }
+        ]
+      }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé ou accès refusé' })
+    }
+
+    const snapshots = await prisma.snapshot.findMany({
+      where: { documentId: id },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        author: { select: { email: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    return reply.send(snapshots)
+  })
+
+  // GET /api/documents/:id/snapshots/:snapshotId — Voir le contenu d'un snapshot
+  app.get('/:id/snapshots/:snapshotId', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
+    const { id, snapshotId } = request.params as { id: string; snapshotId: string }
+
+    const document = await prisma.document.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          { permissions: { some: { userId } } }
+        ]
+      }
+    })
+
+    if (!document) {
+      return reply.status(404).send({ error: 'Document non trouvé ou accès refusé' })
+    }
+
+    const snapshot = await prisma.snapshot.findFirst({
+      where: { id: snapshotId, documentId: id },
+      select: {
+        id: true,
+        name: true,
+        content: true,
+        createdAt: true,
+        author: { select: { email: true } }
+      }
+    })
+
+    if (!snapshot) {
+      return reply.status(404).send({ error: 'Snapshot non trouvé' })
+    }
+
+    return reply.send(snapshot)
+  })
+
   // GET /api/documents/:id/export?format=html
   // GET /api/documents/:id/export?format=md
   app.get('/:id/export', { preHandler: authenticate }, async (request, reply) => {
@@ -212,22 +327,22 @@ export async function documentRoutes(app: FastifyInstance) {
 
     if (format === 'html') {
       const html = `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>${title}</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; line-height: 1.6; }
-    h1, h2, h3 { margin-top: 1.5em; }
-    code { background: #f1f3f4; padding: 2px 6px; border-radius: 4px; }
-    pre { background: #f1f3f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
-  </style>
-</head>
-<body>
-  <h1>${title}</h1>
-  ${content}
-</body>
-</html>`
+        <html lang="fr">
+        <head>
+          <meta charset="UTF-8">
+          <title>${title}</title>
+          <style>
+            body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; line-height: 1.6; }
+            h1, h2, h3 { margin-top: 1.5em; }
+            code { background: #f1f3f4; padding: 2px 6px; border-radius: 4px; }
+            pre { background: #f1f3f4; padding: 16px; border-radius: 8px; overflow-x: auto; }
+          </style>
+        </head>
+        <body>
+          <h1>${title}</h1>
+          ${content}
+        </body>
+        </html>`
 
       reply.header('Content-Type', 'text/html; charset=utf-8')
       reply.header('Content-Disposition', `attachment; filename="${title}.html"`)

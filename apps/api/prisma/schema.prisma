@@ -16,7 +16,8 @@ model User {
   ownedDocuments  Document[]       @relation("DocumentOwner")
   permissions     Permission[]
   refreshTokens   RefreshToken[]
-  workspaces      WorkspaceMember[]   // ← ajouter
+  workspaces      WorkspaceMember[]
+  snapshots  Snapshot[]
 }
 
 model Workspace {
@@ -52,6 +53,7 @@ model Document {
   owner       User         @relation("DocumentOwner", fields: [ownerId], references: [id])
   permissions Permission[]
   shareLinks  ShareLink[]
+  snapshots  Snapshot[]
 }
 
 model Permission {
@@ -87,7 +89,17 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+model Snapshot {
+  id         String   @id @default(uuid())
+  documentId String
+  name       String
+  content    String
+  createdAt  DateTime @default(now())
+  createdBy  String
 
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [createdBy], references: [id])
+}
 enum DocumentRole {
   OWNER
   EDITOR

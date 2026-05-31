@@ -27,6 +27,10 @@ export default function EditorPage({ docId, onBack }: Props) {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
   const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
   const [ydoc] = useState(() => new Y.Doc())
+  const [showHistory, setShowHistory] = useState(false)
+  const [snapshots, setSnapshots] = useState<{ id: string; name: string; createdAt: string; author: { email: string } }[]>([])
+  const [snapshotName, setSnapshotName] = useState('')
+  const [previewSnapshot, setPreviewSnapshot] = useState<{ name: string; content: string; createdAt: string } | null>(null)
   const providerRef = useRef<WebsocketProvider | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -127,6 +131,36 @@ export default function EditorPage({ docId, onBack }: Props) {
     }
   }
 
+  const loadSnapshots = async () => {
+    try {
+      const res = await api.get(`/api/documents/${docId}/snapshots`)
+      setSnapshots(res.data)
+    } catch {
+      console.error('Erreur chargement snapshots')
+    }
+  }
+
+  const createSnapshot = async () => {
+    try {
+      await api.post(`/api/documents/${docId}/snapshots`, {
+        name: snapshotName.trim() || undefined
+      })
+      setSnapshotName('')
+      loadSnapshots()
+    } catch {
+      alert('Erreur création snapshot — le document doit être sauvegardé d\'abord')
+    }
+  }
+
+  const viewSnapshot = async (snapshotId: string) => {
+    try {
+      const res = await api.get(`/api/documents/${docId}/snapshots/${snapshotId}`)
+      setPreviewSnapshot(res.data)
+    } catch {
+      alert('Erreur chargement snapshot')
+    }
+  }
+
   return (
     <div style={{ fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid #eee' }}>
@@ -194,13 +228,82 @@ export default function EditorPage({ docId, onBack }: Props) {
             ↓ Markdown
           </button>
         </div>
+        <button
+          onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadSnapshots() }}
+          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showHistory ? '#e8f0fe' : 'white' }}>
+          🕐 Versions
+        </button>
       
       </div>
 
-      {/* Zone d'édition */}
-      <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
-        <EditorContent editor={editor} />
-      </div>
+      {/* Zone principale — éditeur + panel historique */}
+        <div style={{ display: 'flex', flex: 1 }}>
+
+          {/* Éditeur */}
+          <div style={{ flex: 1, padding: 24, maxWidth: showHistory ? 'calc(100% - 300px)' : 800, margin: '0 auto' }}>
+            <EditorContent editor={editor} />
+          </div>
+
+          {/* Panel historique */}
+          {showHistory && (
+            <div style={{ width: 300, borderLeft: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>🕐 Historique des versions</div>
+
+              {/* Créer un snapshot */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  placeholder="Nom de la version..."
+                  value={snapshotName}
+                  onChange={e => setSnapshotName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createSnapshot()}
+                  style={{ padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ddd' }}
+                />
+                <button onClick={createSnapshot}
+                  style={{ padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
+                  + Sauvegarder cette version
+                </button>
+              </div>
+
+              <hr style={{ margin: '4px 0' }} />
+
+              {/* Liste des snapshots */}
+              {snapshots.length === 0 ? (
+                <p style={{ color: '#999', fontSize: 13 }}>Aucune version sauvegardée</p>
+              ) : (
+                snapshots.map(s => (
+                  <div key={s.id}
+                    onClick={() => viewSnapshot(s.id)}
+                    style={{ padding: '8px 12px', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer', background: '#fafafa' }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{s.name}</div>
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                      {new Date(s.createdAt).toLocaleDateString('fr-FR')} — {s.author.email}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Modal preview snapshot */}
+        {previewSnapshot && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: 'white', borderRadius: 12, padding: 24, width: '70vw', maxHeight: '80vh', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>📄 {previewSnapshot.name}</h3>
+                <button onClick={() => setPreviewSnapshot(null)}
+                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#666' }}>✕</button>
+              </div>
+              <div style={{ fontSize: 12, color: '#999' }}>
+                {new Date(previewSnapshot.createdAt).toLocaleDateString('fr-FR')}
+              </div>
+              <div
+                style={{ padding: 16, border: '1px solid #eee', borderRadius: 8, lineHeight: 1.6 }}
+                dangerouslySetInnerHTML={{ __html: previewSnapshot.content }}
+              />
+            </div>
+          </div>
+        )}
     </div>
   )
 }
