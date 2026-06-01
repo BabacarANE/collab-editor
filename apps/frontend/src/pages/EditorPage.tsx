@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore'
 import { api } from '../api/client'
 import Mention from '@tiptap/extension-mention'
 import tippy from 'tippy.js'
+import SnapshotDiff from '../components/SnapshotDiff'
 
 
 interface Props {
@@ -28,6 +29,7 @@ function userColor(userId: string): string {
 export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   const { user, accessToken, logout } = useAuthStore()
   const [docTitle, setDocTitle] = useState('Sans titre')
+  const [showDiff, setShowDiff] = useState(false)
   const activeWorkspaceId = workspaceId
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
   const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
@@ -302,14 +304,21 @@ const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
   }
 }
 
-  const loadSnapshots = async () => {
-    try {
-      const res = await api.get(`/api/documents/${docId}/snapshots`)
-      setSnapshots(res.data)
-    } catch {
-      console.error('Erreur chargement snapshots')
-    }
+const loadSnapshots = async () => {
+  try {
+    const res = await api.get(`/api/documents/${docId}/snapshots`)
+    // Pour chaque snapshot, charger le contenu
+    const withContent = await Promise.all(
+      res.data.map(async (s: any) => {
+        const detail = await api.get(`/api/documents/${docId}/snapshots/${s.id}`)
+        return detail.data
+      })
+    )
+    setSnapshots(withContent)
+  } catch {
+    console.error('Erreur chargement snapshots')
   }
+}
 
   const createSnapshot = async () => {
     try {
@@ -450,6 +459,18 @@ const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
           style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showHistory ? '#e8f0fe' : 'white' }}>
           🕐 Versions
         </button>
+
+        {snapshots.length >= 2 && (
+          <button onClick={() => setShowDiff(true)}
+            style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
+            🔍 Comparer deux versions
+          </button>
+        )}
+
+        {showDiff && (
+          <SnapshotDiff snapshots={snapshots} onClose={() => setShowDiff(false)} />
+        )}
+
         <button
           onClick={() => { setShowComments(!showComments); if (!showComments) loadComments() }}
           style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showComments ? '#e8f0fe' : 'white' }}>
