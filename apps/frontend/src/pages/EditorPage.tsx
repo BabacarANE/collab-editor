@@ -9,6 +9,7 @@ import { api } from '../api/client'
 import Mention from '@tiptap/extension-mention'
 import tippy from 'tippy.js'
 import SnapshotDiff from '../components/SnapshotDiff'
+import DocumentPermissions from '../components/DocumentPermissions'
 
 
 interface Props {
@@ -47,14 +48,26 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  const [showPermissions, setShowPermissions] = useState(false)
+  const [myRole, setMyRole] = useState<string>('OWNER')
   
 
 
-  // Charger le titre
+  // Charger le titre + le rôle
   useEffect(() => {
-    api.get(`/api/documents/${docId}`)
-      .then(res => setDocTitle(res.data.title))
-      .catch(() => setDocTitle('Document'))
+    const loadDoc = async () => {
+      try {
+        const [docRes, roleRes] = await Promise.all([
+          api.get(`/api/documents/${docId}`),
+          api.get(`/api/documents/${docId}/my-role`)
+        ])
+        setDocTitle(docRes.data.title)
+        setMyRole(roleRes.data.role)
+      } catch {
+        setDocTitle('Document')
+      }
+    }
+    loadDoc()
   }, [docId])
 
   // Connexion WebSocket + awareness
@@ -169,6 +182,7 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
 
   // Initialiser l'éditeur
   const editor = useEditor({
+    editable: myRole !== 'VIEWER' && myRole !== 'COMMENTER',
     extensions: [
       StarterKit.configure({ history: false, undoRedo: false }),
       Collaboration.configure({ document: ydoc }),
@@ -231,6 +245,12 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
     ]
   })
 
+useEffect(() => {
+  if (!editor) return
+  const canEdit = myRole !== 'VIEWER' && myRole !== 'COMMENTER'
+  editor.setEditable(canEdit)
+}, [editor, myRole])
+
   // Synchroniser la ref avec l'éditeur
   useEffect(() => {
     if (editor) {
@@ -243,6 +263,8 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
     if (!editor) return
 
     const handleUpdate = () => {
+      if (myRole === 'VIEWER' || myRole === 'COMMENTER') return
+
     setSaveStatus('unsaved')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(async () => {
@@ -282,7 +304,7 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
       editor.off('update', handleUpdate)
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [editor, docId])
+  }, [editor, docId, myRole])
 
   const statusColor = { connecting: '#f59e0b', connected: '#10b981', disconnected: '#ef4444' }[status]
   const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
@@ -476,8 +498,22 @@ const loadSnapshots = async () => {
           style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showComments ? '#e8f0fe' : 'white' }}>
           💬 Commentaires
         </button>
+        <button
+          onClick={() => setShowPermissions(!showPermissions)}
+          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
+          🔐 Partage
+        </button>
       
       </div>
+      {(myRole === 'VIEWER' || myRole === 'COMMENTER') && (
+        <div style={{
+          padding: '8px 24px', background: '#fef9c3',
+          borderBottom: '1px solid #fde047', fontSize: 13, color: '#854d0e',
+          display: 'flex', alignItems: 'center', gap: 8
+        }}>
+          {myRole === 'VIEWER' ? '👁 Mode lecture seule' : '💬 Mode commentaire uniquement — édition désactivée'}
+        </div>
+      )}
 
       {/* Zone principale — éditeur + panel historique */}
         <div style={{ display: 'flex', flex: 1 }}>
@@ -652,6 +688,14 @@ const loadSnapshots = async () => {
               />
             </div>
           </div>
+        )}
+        {showPermissions && (
+          <DocumentPermissions
+            docId={docId}
+            docTitle={docTitle}
+            workspaceId={workspaceId}
+            onClose={() => setShowPermissions(false)}
+          />
         )}
     </div>
   )

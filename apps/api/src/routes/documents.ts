@@ -406,6 +406,8 @@ export async function documentRoutes(app: FastifyInstance) {
     return reply.status(204).send()
   })
 
+ 
+
   // GET /api/documents/:id/export?format=html
   // GET /api/documents/:id/export?format=md
   app.get('/:id/export', { preHandler: authenticate }, async (request, reply) => {
@@ -574,4 +576,7 @@ export async function documentRoutes(app: FastifyInstance) {
 
       return reply.status(400).send({ error: 'Format non supporté. Utiliser ?format=html, ?format=md ou ?format=pdf' })
     })
+
+
+
 }

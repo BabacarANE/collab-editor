@@ -9,6 +9,7 @@ import { workspaceRoutes } from './routes/workspaces'
 import { importRoutes } from './routes/import'
 import { searchRoutes } from './routes/search'
 import { notificationRoutes } from './routes/notifications'
+import { permissionRoutes } from './routes/permissions'
 
 const app = Fastify({ logger: true })
 
@@ -32,6 +33,7 @@ app.register(workspaceRoutes, { prefix: '/api/workspaces' })
 app.register(importRoutes, { prefix: '/api/import' })
 app.register(searchRoutes, { prefix: '/api/search' })
 app.register(notificationRoutes, { prefix: '/api/notifications' })
+app.register(permissionRoutes, { prefix: '/api/documents' })
 
 const start = async () => {
   try {
