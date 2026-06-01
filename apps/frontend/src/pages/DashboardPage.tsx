@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/authStore'
-
+import ImportButton from '../components/ImportButton'
 interface Workspace {
   id: string
   name: string
@@ -265,6 +265,15 @@ export default function DashboardPage({ onOpenDocument }: Props) {
                 + Nouveau document
               </button>
             </div>
+
+            {activeWorkspace && (
+              <div style={{ marginBottom: 16 }}>
+                <ImportButton
+                 workspaceId={activeWorkspace.id}
+                  onImported={(doc) => setDocuments(prev => [doc, ...prev])}
+                 />
+                </div>
+              )}
 
             {error && <p style={{ color: 'red' }}>{error}</p>}
 

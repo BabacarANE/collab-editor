@@ -7,6 +7,7 @@ import { WebsocketProvider } from 'y-websocket'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../api/client'
 
+
 interface Props {
   docId: string
   onBack: () => void
@@ -146,22 +147,22 @@ export default function EditorPage({ docId, onBack }: Props) {
   const statusColor = { connecting: '#f59e0b', connected: '#10b981', disconnected: '#ef4444' }[status]
   const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
 
-  const exportDocument = async (format: 'html' | 'md') => {
-    try {
-      const res = await api.get(`/api/documents/${docId}/export?format=${format}`, {
-        responseType: 'blob'
-      })
-      const ext = format === 'html' ? 'html' : 'md'
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${docTitle}.${ext}`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch {
-      alert('Erreur export')
-    }
+const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
+  try {
+    const res = await api.get(`/api/documents/${docId}/export?format=${format}`, {
+      responseType: 'blob'
+    })
+    const ext = format === 'html' ? 'html' : format === 'md' ? 'md' : 'pdf'
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${docTitle}.${ext}`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch {
+    alert('Erreur export')
   }
+}
 
   const loadSnapshots = async () => {
     try {
@@ -300,7 +301,12 @@ export default function EditorPage({ docId, onBack }: Props) {
             style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
             ↓ Markdown
           </button>
+          <button onClick={() => exportDocument('pdf')}
+            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
+            ↓ PDF
+          </button>
         </div>
+        
         <button
           onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadSnapshots() }}
           style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showHistory ? '#e8f0fe' : 'white' }}>

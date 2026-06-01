@@ -464,6 +464,114 @@ export async function documentRoutes(app: FastifyInstance) {
       return reply.send(markdown)
     }
 
-    return reply.status(400).send({ error: 'Format non supporté. Utiliser ?format=html ou ?format=md' })
-  })
+
+    if (format === 'pdf') {
+        const puppeteer = await import('puppeteer')
+        const browser = await puppeteer.default.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+          ]
+        })
+
+        try {
+          const page = await browser.newPage()
+
+          const html = `<!DOCTYPE html>
+  <html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <title>${title}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 13px;
+        line-height: 1.7;
+        color: #1a1a1a;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 40px;
+      }
+      h1 { font-size: 26px; font-weight: 700; margin: 0 0 8px; color: #111; }
+      h2 { font-size: 20px; font-weight: 600; margin: 28px 0 8px; color: #222; }
+      h3 { font-size: 16px; font-weight: 600; margin: 20px 0 6px; color: #333; }
+      p  { margin: 0 0 12px; }
+      ul, ol { margin: 0 0 12px; padding-left: 24px; }
+      li { margin-bottom: 4px; }
+      code {
+        background: #f1f3f4;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+      }
+      pre {
+        background: #f1f3f4;
+        padding: 14px 16px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 0 0 14px;
+      }
+      pre code { background: none; padding: 0; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 14px;
+        font-size: 12px;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 7px 10px;
+        text-align: left;
+      }
+      th { background: #f5f5f5; font-weight: 600; }
+      blockquote {
+        border-left: 3px solid #ddd;
+        margin: 0 0 14px;
+        padding: 4px 16px;
+        color: #555;
+      }
+      .doc-title {
+        border-bottom: 2px solid #e8e8e8;
+        padding-bottom: 16px;
+        margin-bottom: 28px;
+      }
+      .doc-meta {
+        font-size: 11px;
+        color: #888;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc-title">
+      <h1>${title}</h1>
+      <div class="doc-meta">Exporté le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+    </div>
+    ${content}
+  </body>
+  </html>`
+
+          await page.setContent(html, { waitUntil: 'networkidle0' })
+
+          const pdfBuffer = await page.pdf({
+            format: 'A4',
+            margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' },
+            printBackground: true
+          })
+
+          reply.header('Content-Type', 'application/pdf')
+          reply.header('Content-Disposition', `attachment; filename="${title}.pdf"`)
+          return reply.send(Buffer.from(pdfBuffer))
+        } finally {
+          await browser.close()
+        }
+      }
+
+      return reply.status(400).send({ error: 'Format non supporté. Utiliser ?format=html, ?format=md ou ?format=pdf' })
+    })
 }
