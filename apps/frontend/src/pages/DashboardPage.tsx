@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import ImportButton from '../components/ImportButton'
+import SearchBar from '../components/SearchBar'
 interface Workspace {
   id: string
   name: string
@@ -232,12 +233,12 @@ export default function DashboardPage({ onOpenDocument }: Props) {
         </div>
 
         <div style={{ marginTop: 'auto' }}>
-          <button onClick={logout}
-            style={{ width: '100%', padding: 8, cursor: 'pointer', background: 'none', border: '1px solid #ddd', borderRadius: 4, color: '#666' }}>
-            Déconnexion
-          </button>
+            <button onClick={logout}
+              style={{ width: '100%', padding: 8, cursor: 'pointer', background: 'none', border: '1px solid #ddd', borderRadius: 4, color: '#666' }}>
+              Déconnexion
+            </button>
+          </div>
         </div>
-      </div>
 
       {/* Zone principale */}
       <div style={{ flex: 1, padding: 32 }}>
@@ -249,6 +250,10 @@ export default function DashboardPage({ onOpenDocument }: Props) {
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h2 style={{ margin: 0 }}>📁 {activeWorkspace.name}</h2>
+              <SearchBar
+                workspaceId={activeWorkspace.id}
+                onOpenDocument={onOpenDocument}
+              />
               <button onClick={openMembers}
                 style={{ padding: '8px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
                 👥 Membres

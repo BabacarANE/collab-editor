@@ -56,6 +56,8 @@ model Document {
   shareLinks  ShareLink[]
   snapshots  Snapshot[]
   comments   Comment[]
+  searchVector  Unsupported("tsvector")?
+  @@index([workspaceId])
 }
 
 model Permission {
