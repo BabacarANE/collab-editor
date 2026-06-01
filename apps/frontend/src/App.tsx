@@ -10,6 +10,7 @@ export default function App() {
   const user = useAuthStore((s) => s.user)
   const [view, setView] = useState<View>(user ? 'dashboard' : 'login')
   const [currentDocId, setCurrentDocId] = useState<string | null>(null)
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null)
 
   if (view === 'login') {
     return <LoginPage onLogin={() => setView('dashboard')} />
@@ -19,6 +20,7 @@ export default function App() {
     return (
       <EditorPage
         docId={currentDocId}
+        workspaceId={currentWorkspaceId ?? ''}
         onBack={() => setView('dashboard')}
       />
     )
@@ -26,8 +28,9 @@ export default function App() {
 
   return (
     <DashboardPage
-      onOpenDocument={(docId) => {
+      onOpenDocument={(docId, workspaceId) => {
         setCurrentDocId(docId)
+        setCurrentWorkspaceId(workspaceId)
         setView('editor')
       }}
     />

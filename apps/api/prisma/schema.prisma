@@ -19,6 +19,7 @@ model User {
   workspaces      WorkspaceMember[]
   snapshots  Snapshot[]
   comments   Comment[]
+  notifications Notification[]
 }
 
 model Workspace {
@@ -105,6 +106,7 @@ model Snapshot {
   author   User     @relation(fields: [createdBy], references: [id])
 }
 
+
 model Comment {
   id         String   @id @default(uuid())
   documentId String
@@ -119,6 +121,17 @@ model Comment {
   author   User      @relation(fields: [authorId], references: [id])
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies  Comment[] @relation("CommentReplies")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  payload   Json
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum DocumentRole {

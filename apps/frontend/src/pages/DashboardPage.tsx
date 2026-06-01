@@ -22,7 +22,7 @@ interface Member {
 }
 
 interface Props {
-  onOpenDocument: (docId: string) => void
+  onOpenDocument: (docId: string, workspaceId: string) => void
 }
 
 export default function DashboardPage({ onOpenDocument }: Props) {
@@ -289,7 +289,7 @@ export default function DashboardPage({ onOpenDocument }: Props) {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {documents.map(doc => (
-                  <div key={doc.id} onClick={() => onOpenDocument(doc.id)}
+                  <div key={doc.id} onClick={() => onOpenDocument(doc.id, activeWorkspace.id)}
                     style={{
                       padding: '12px 16px', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa'

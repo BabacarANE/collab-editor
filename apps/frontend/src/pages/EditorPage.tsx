@@ -1,16 +1,19 @@
-import { useEffect, useState, useRef } from 'react'
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../api/client'
+import Mention from '@tiptap/extension-mention'
+import tippy from 'tippy.js'
 
 
 interface Props {
   docId: string
   onBack: () => void
+  workspaceId: string   
 }
 
 function userColor(userId: string): string {
@@ -22,9 +25,10 @@ function userColor(userId: string): string {
   return colors[Math.abs(hash) % colors.length]
 }
 
-export default function EditorPage({ docId, onBack }: Props) {
+export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   const { user, accessToken, logout } = useAuthStore()
   const [docTitle, setDocTitle] = useState('Sans titre')
+  const activeWorkspaceId = workspaceId
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
   const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
   const [ydoc] = useState(() => new Y.Doc())
@@ -41,6 +45,7 @@ export default function EditorPage({ docId, onBack }: Props) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  
 
 
   // Charger le titre
@@ -102,11 +107,125 @@ export default function EditorPage({ docId, onBack }: Props) {
     }
   }, [])
 
+
+
+  const MentionList = forwardRef((props: any, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0)
+
+    const selectItem = (index: number) => {
+      const item = props.items[index]
+      if (item) props.command({ id: item.id, label: item.label })
+    }
+
+    useEffect(() => setSelectedIndex(0), [props.items])
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+        if (event.key === 'ArrowUp') {
+          setSelectedIndex(i => (i + props.items.length - 1) % props.items.length)
+          return true
+        }
+        if (event.key === 'ArrowDown') {
+          setSelectedIndex(i => (i + 1) % props.items.length)
+          return true
+        }
+        if (event.key === 'Enter') {
+          selectItem(selectedIndex)
+          return true
+        }
+        return false
+      }
+    }))
+
+    return (
+      <div style={{
+        background: 'white', border: '1px solid #eee', borderRadius: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, minWidth: 200
+      }}>
+        {props.items.length === 0 ? (
+          <div style={{ padding: '8px 12px', fontSize: 13, color: '#999' }}>Aucun résultat</div>
+        ) : (
+          props.items.map((item: any, index: number) => (
+            <div
+              key={item.id}
+              onClick={() => selectItem(index)}
+              style={{
+                padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderRadius: 4,
+                background: index === selectedIndex ? '#e8f0fe' : 'transparent',
+                color: index === selectedIndex ? '#1a73e8' : '#1a1a1a'
+              }}
+            >
+              @{item.label}
+            </div>
+          ))
+        )}
+      </div>
+    )
+  })
+  MentionList.displayName = 'MentionList'
+
+
   // Initialiser l'éditeur
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ history: false, undoRedo: false }),
-      Collaboration.configure({ document: ydoc })
+      Collaboration.configure({ document: ydoc }),
+      Mention.configure({
+        HTMLAttributes: { class: 'mention' },
+        suggestion: {
+          items: async ({ query }: { query: string }) => {
+            if (!workspaceId) return []
+            try {
+              const res = await api.get(`/api/workspaces/${workspaceId}`)
+              const members = res.data.members as { role: string; user: { id: string; email: string } }[]
+              return members
+                .map(m => ({ id: m.user.id, label: m.user.email }))
+                .filter(m => m.label.toLowerCase().includes(query.toLowerCase()))
+                .slice(0, 8)
+            } catch {
+              return []
+            }
+          },
+          render: () => {
+            let component: ReactRenderer
+            let popup: any
+
+            return {
+              onStart: (props: any) => {
+                component = new ReactRenderer(MentionList, {
+                  props,
+                  editor: props.editor,
+                })
+
+                popup = tippy('body', {
+                  getReferenceClientRect: props.clientRect,
+                  appendTo: () => document.body,
+                  content: component.element,
+                  showOnCreate: true,
+                  interactive: true,
+                  trigger: 'manual',
+                  placement: 'bottom-start',
+                })
+              },
+              onUpdate: (props: any) => {
+                component.updateProps(props)
+                popup[0].setProps({ getReferenceClientRect: props.clientRect })
+              },
+              onKeyDown: (props: any) => {
+                if (props.event.key === 'Escape') {
+                  popup[0].hide()
+                  return true
+                }
+                return (component.ref as any)?.onKeyDown?.(props) ?? false
+              },
+              onExit: () => {
+                popup[0].destroy()
+                component.destroy()
+              },
+            }
+          },
+        },
+      }),
     ]
   })
 
@@ -122,18 +241,37 @@ export default function EditorPage({ docId, onBack }: Props) {
     if (!editor) return
 
     const handleUpdate = () => {
-      setSaveStatus('unsaved')
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = setTimeout(async () => {
-        setSaveStatus('saving')
-        try {
-          const html = editor.getHTML()
-          await api.patch(`/api/documents/${docId}/content`, { content: html })
-          setSaveStatus('saved')
-        } catch {
-          setSaveStatus('unsaved')
+    setSaveStatus('unsaved')
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      setSaveStatus('saving')
+      try {
+        const html = editor.getHTML()
+        await api.patch(`/api/documents/${docId}/content`, { content: html })
+
+        // Détecter les mentions dans le JSON et créer les notifications
+        const mentionEls = editor.getJSON().content
+          ?.flatMap((node: any) => node.content ?? [])
+          ?.filter((node: any) => node.type === 'mention') ?? []
+
+        if (mentionEls.length > 0) {
+          const docRes = await api.get(`/api/documents/${docId}`)
+          await Promise.allSettled(
+            mentionEls.map((m: any) =>
+              api.post('/api/notifications/mention', {
+                mentionedUserId: m.attrs.id,
+                documentId: docId,
+                documentTitle: docRes.data.title
+              })
+            )
+          )
         }
-      }, 5000)
+
+        setSaveStatus('saved')
+      } catch {
+        setSaveStatus('unsaved')
+      }
+    }, 5000)
     }
 
     editor.on('update', handleUpdate)
