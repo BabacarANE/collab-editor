@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -9,8 +9,14 @@ type View = 'login' | 'dashboard' | 'editor'
 export default function App() {
   const user = useAuthStore((s) => s.user)
   const [view, setView] = useState<View>(user ? 'dashboard' : 'login')
+
+
   const [currentDocId, setCurrentDocId] = useState<string | null>(null)
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user) setView('login')
+  }, [user])
 
   if (view === 'login') {
     return <LoginPage onLogin={() => setView('dashboard')} />

@@ -1,61 +1,65 @@
-import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
+import Mention from '@tiptap/extension-mention'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
+import tippy from 'tippy.js'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../api/client'
-import Mention from '@tiptap/extension-mention'
-import tippy from 'tippy.js'
+import EditorToolbar from '../components/EditorToolbar'
+import HistoryPanel from '../components/HistoryPanel'
+import CommentsPanel from '../components/CommentsPanel'
+import MentionList from '../components/MentionList'
 import SnapshotDiff from '../components/SnapshotDiff'
 import DocumentPermissions from '../components/DocumentPermissions'
-
+import NotificationBell from '../components/NotificationBell'
 
 interface Props {
   docId: string
   onBack: () => void
-  workspaceId: string   
+  workspaceId: string
 }
 
 function userColor(userId: string): string {
   const colors = ['#F98181', '#FBBC88', '#FAF594', '#70CFF8', '#94FADB', '#B9F18D', '#C3ABF8']
   let hash = 0
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
-  }
+  for (let i = 0; i < userId.length; i++) hash = userId.charCodeAt(i) + ((hash << 5) - hash)
   return colors[Math.abs(hash) % colors.length]
 }
 
 export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   const { user, accessToken, logout } = useAuthStore()
   const [docTitle, setDocTitle] = useState('Sans titre')
-  const [showDiff, setShowDiff] = useState(false)
-  const activeWorkspaceId = workspaceId
+  const [myRole, setMyRole] = useState('OWNER')
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
   const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
   const [ydoc] = useState(() => new Y.Doc())
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editorRef = useRef<any>(null)
+
+  // Panels
   const [showHistory, setShowHistory] = useState(false)
-  const [snapshots, setSnapshots] = useState<{ id: string; name: string; createdAt: string; author: { email: string } }[]>([])
-  const [snapshotName, setSnapshotName] = useState('')
-  const [previewSnapshot, setPreviewSnapshot] = useState<{ name: string; content: string; createdAt: string } | null>(null)
   const [showComments, setShowComments] = useState(false)
+  const [showPermissions, setShowPermissions] = useState(false)
+  const [showDiff, setShowDiff] = useState(false)
+
+  // Snapshots
+  const [snapshots, setSnapshots] = useState<any[]>([])
+  const [snapshotName, setSnapshotName] = useState('')
+  const [previewSnapshot, setPreviewSnapshot] = useState<any>(null)
+
+  // Comments
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
   const [replyTo, setReplyTo] = useState<{ id: string; email: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
-  const providerRef = useRef<WebsocketProvider | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editorRef = useRef<ReturnType<typeof useEditor>>(null)
-  const [showPermissions, setShowPermissions] = useState(false)
-  const [myRole, setMyRole] = useState<string>('OWNER')
-  
 
-
-  // Charger le titre + le rôle
+  // Charger titre + rôle
   useEffect(() => {
-    const loadDoc = async () => {
+    const load = async () => {
       try {
         const [docRes, roleRes] = await Promise.all([
           api.get(`/api/documents/${docId}`),
@@ -67,122 +71,41 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
         setDocTitle('Document')
       }
     }
-    loadDoc()
+    load()
   }, [docId])
 
-  // Connexion WebSocket + awareness
+  // WebSocket + awareness
   useEffect(() => {
-    const provider = new WebsocketProvider(
-      'ws://localhost:4000',
-      docId,
-      ydoc,
-      { params: { token: accessToken ?? '' } }
-    )
-    providerRef.current = provider
-
+    const provider = new WebsocketProvider('ws://localhost:4000', docId, ydoc, {
+      params: { token: accessToken ?? '' }
+    })
     provider.awareness.setLocalStateField('user', {
       name: user?.email ?? 'Anonyme',
       color: userColor(user?.id ?? 'anon')
     })
-
-    provider.on('status', (event: { status: string }) => {
-      setStatus(event.status as 'connecting' | 'connected' | 'disconnected')
-    })
-
-    // Quand Yjs est synchronisé avec le serveur
+    provider.on('status', (e: { status: string }) =>
+      setStatus(e.status as 'connecting' | 'connected' | 'disconnected')
+    )
     provider.on('synced', async () => {
-      const xmlFragment = ydoc.getXmlFragment('default')
-      const isEmpty = xmlFragment.length === 0
-
+      const isEmpty = ydoc.getXmlFragment('default').length === 0
       if (isEmpty) {
         try {
           const res = await api.get(`/api/documents/${docId}`)
-          const savedContent = res.data.content
-          if (savedContent && savedContent.trim() !== '' && editorRef.current) {
-            editorRef.current.commands.setContent(savedContent)
+          if (res.data.content?.trim() && editorRef.current) {
+            editorRef.current.commands.setContent(res.data.content)
           }
-        } catch {
-          console.error('Erreur chargement contenu initial')
-        }
+        } catch { /* silencieux */ }
       }
     })
-
-    const updateUsers = () => {
+    provider.awareness.on('change', () => {
       const states = Array.from(provider.awareness.getStates().values()) as any[]
-      const users = states
-        .filter(s => s.user)
-        .map(s => ({ name: s.user.name, color: s.user.color }))
-      setAwarenessUsers(users)
-    }
-
-    provider.awareness.on('change', updateUsers)
-
-    return () => {
-      provider.disconnect()
-    }
+      setAwarenessUsers(states.filter(s => s.user).map(s => ({ name: s.user.name, color: s.user.color })))
+    })
+    return () => provider.disconnect()
   }, [])
 
-
-
-  const MentionList = forwardRef((props: any, ref) => {
-    const [selectedIndex, setSelectedIndex] = useState(0)
-
-    const selectItem = (index: number) => {
-      const item = props.items[index]
-      if (item) props.command({ id: item.id, label: item.label })
-    }
-
-    useEffect(() => setSelectedIndex(0), [props.items])
-
-    useImperativeHandle(ref, () => ({
-      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-        if (event.key === 'ArrowUp') {
-          setSelectedIndex(i => (i + props.items.length - 1) % props.items.length)
-          return true
-        }
-        if (event.key === 'ArrowDown') {
-          setSelectedIndex(i => (i + 1) % props.items.length)
-          return true
-        }
-        if (event.key === 'Enter') {
-          selectItem(selectedIndex)
-          return true
-        }
-        return false
-      }
-    }))
-
-    return (
-      <div style={{
-        background: 'white', border: '1px solid #eee', borderRadius: 8,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, minWidth: 200
-      }}>
-        {props.items.length === 0 ? (
-          <div style={{ padding: '8px 12px', fontSize: 13, color: '#999' }}>Aucun résultat</div>
-        ) : (
-          props.items.map((item: any, index: number) => (
-            <div
-              key={item.id}
-              onClick={() => selectItem(index)}
-              style={{
-                padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderRadius: 4,
-                background: index === selectedIndex ? '#e8f0fe' : 'transparent',
-                color: index === selectedIndex ? '#1a73e8' : '#1a1a1a'
-              }}
-            >
-              @{item.label}
-            </div>
-          ))
-        )}
-      </div>
-    )
-  })
-  MentionList.displayName = 'MentionList'
-
-
-  // Initialiser l'éditeur
+  // Éditeur
   const editor = useEditor({
-    editable: myRole !== 'VIEWER' && myRole !== 'COMMENTER',
     extensions: [
       StarterKit.configure({ history: false, undoRedo: false }),
       Collaboration.configure({ document: ydoc }),
@@ -190,29 +113,20 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
         HTMLAttributes: { class: 'mention' },
         suggestion: {
           items: async ({ query }: { query: string }) => {
-            if (!workspaceId) return []
             try {
               const res = await api.get(`/api/workspaces/${workspaceId}`)
-              const members = res.data.members as { role: string; user: { id: string; email: string } }[]
-              return members
-                .map(m => ({ id: m.user.id, label: m.user.email }))
-                .filter(m => m.label.toLowerCase().includes(query.toLowerCase()))
+              return (res.data.members as any[])
+                .map((m: any) => ({ id: m.user.id, label: m.user.email }))
+                .filter((m: any) => m.label.toLowerCase().includes(query.toLowerCase()))
                 .slice(0, 8)
-            } catch {
-              return []
-            }
+            } catch { return [] }
           },
           render: () => {
             let component: ReactRenderer
             let popup: any
-
             return {
               onStart: (props: any) => {
-                component = new ReactRenderer(MentionList, {
-                  props,
-                  editor: props.editor,
-                })
-
+                component = new ReactRenderer(MentionList, { props, editor: props.editor })
                 popup = tippy('body', {
                   getReferenceClientRect: props.clientRect,
                   appendTo: () => document.body,
@@ -228,475 +142,273 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
                 popup[0].setProps({ getReferenceClientRect: props.clientRect })
               },
               onKeyDown: (props: any) => {
-                if (props.event.key === 'Escape') {
-                  popup[0].hide()
-                  return true
-                }
+                if (props.event.key === 'Escape') { popup[0].hide(); return true }
                 return (component.ref as any)?.onKeyDown?.(props) ?? false
               },
-              onExit: () => {
-                popup[0].destroy()
-                component.destroy()
-              },
+              onExit: () => { popup[0].destroy(); component.destroy() }
             }
-          },
-        },
-      }),
+          }
+        }
+      })
     ]
   })
 
-useEffect(() => {
-  if (!editor) return
-  const canEdit = myRole !== 'VIEWER' && myRole !== 'COMMENTER'
-  editor.setEditable(canEdit)
-}, [editor, myRole])
+  useEffect(() => { if (editor) editorRef.current = editor }, [editor])
 
-  // Synchroniser la ref avec l'éditeur
-  useEffect(() => {
-    if (editor) {
-      (editorRef as any).current = editor
-    }
-  }, [editor])
-
-  // Auto-save toutes les 5s après inactivité
   useEffect(() => {
     if (!editor) return
+    editor.setEditable(myRole !== 'VIEWER' && myRole !== 'COMMENTER')
+  }, [editor, myRole])
 
+  // Auto-save
+  useEffect(() => {
+    if (!editor) return
     const handleUpdate = () => {
       if (myRole === 'VIEWER' || myRole === 'COMMENTER') return
-
-    setSaveStatus('unsaved')
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(async () => {
-      setSaveStatus('saving')
-      try {
-        const html = editor.getHTML()
-        await api.patch(`/api/documents/${docId}/content`, { content: html })
-
-        // Détecter les mentions dans le JSON et créer les notifications
-        const mentionEls = editor.getJSON().content
-          ?.flatMap((node: any) => node.content ?? [])
-          ?.filter((node: any) => node.type === 'mention') ?? []
-
-        if (mentionEls.length > 0) {
-          const docRes = await api.get(`/api/documents/${docId}`)
-          await Promise.allSettled(
-            mentionEls.map((m: any) =>
+      setSaveStatus('unsaved')
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(async () => {
+        setSaveStatus('saving')
+        try {
+          const html = editor.getHTML()
+          await api.patch(`/api/documents/${docId}/content`, { content: html })
+          const mentionEls = editor.getJSON().content
+            ?.flatMap((n: any) => n.content ?? [])
+            ?.filter((n: any) => n.type === 'mention') ?? []
+          if (mentionEls.length > 0) {
+            const docRes = await api.get(`/api/documents/${docId}`)
+            await Promise.allSettled(mentionEls.map((m: any) =>
               api.post('/api/notifications/mention', {
                 mentionedUserId: m.attrs.id,
                 documentId: docId,
                 documentTitle: docRes.data.title
               })
-            )
-          )
-        }
-
-        setSaveStatus('saved')
-      } catch {
-        setSaveStatus('unsaved')
-      }
-    }, 5000)
+            ))
+          }
+          setSaveStatus('saved')
+        } catch { setSaveStatus('unsaved') }
+      }, 5000)
     }
-
     editor.on('update', handleUpdate)
-
     return () => {
       editor.off('update', handleUpdate)
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   }, [editor, docId, myRole])
 
-  const statusColor = { connecting: '#f59e0b', connected: '#10b981', disconnected: '#ef4444' }[status]
-  const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
+  // Snapshots
+  const loadSnapshots = async () => {
+    const res = await api.get(`/api/documents/${docId}/snapshots`)
+    const withContent = await Promise.all(
+      res.data.map(async (s: any) => {
+        const d = await api.get(`/api/documents/${docId}/snapshots/${s.id}`)
+        return d.data
+      })
+    )
+    setSnapshots(withContent)
+  }
 
-const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
-  try {
-    const res = await api.get(`/api/documents/${docId}/export?format=${format}`, {
-      responseType: 'blob'
-    })
-    const ext = format === 'html' ? 'html' : format === 'md' ? 'md' : 'pdf'
+  const createSnapshot = async () => {
+    try {
+      await api.post(`/api/documents/${docId}/snapshots`, { name: snapshotName.trim() || undefined })
+      setSnapshotName('')
+      loadSnapshots()
+    } catch { alert('Erreur création snapshot') }
+  }
+
+  const viewSnapshot = async (snapshotId: string) => {
+    const res = await api.get(`/api/documents/${docId}/snapshots/${snapshotId}`)
+    setPreviewSnapshot(res.data)
+  }
+
+  // Comments
+  const loadComments = async () => {
+    const res = await api.get(`/api/documents/${docId}/comments`)
+    setComments(res.data)
+  }
+
+  const postComment = async () => {
+    if (!newComment.trim()) return
+    await api.post(`/api/documents/${docId}/comments`, { content: newComment.trim() })
+    setNewComment('')
+    loadComments()
+  }
+
+  const postReply = async (parentId: string) => {
+    if (!replyContent.trim()) return
+    await api.post(`/api/documents/${docId}/comments`, { content: replyContent.trim(), parentId })
+    setReplyContent('')
+    setReplyTo(null)
+    loadComments()
+  }
+
+  const resolveComment = async (commentId: string) => {
+    await api.patch(`/api/documents/${docId}/comments/${commentId}/resolve`)
+    loadComments()
+  }
+
+  const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
+    const res = await api.get(`/api/documents/${docId}/export?format=${format}`, { responseType: 'blob' })
+    const ext = format
     const url = window.URL.createObjectURL(new Blob([res.data]))
     const a = document.createElement('a')
     a.href = url
     a.download = `${docTitle}.${ext}`
     a.click()
     window.URL.revokeObjectURL(url)
-  } catch {
-    alert('Erreur export')
-  }
-}
-
-const loadSnapshots = async () => {
-  try {
-    const res = await api.get(`/api/documents/${docId}/snapshots`)
-    // Pour chaque snapshot, charger le contenu
-    const withContent = await Promise.all(
-      res.data.map(async (s: any) => {
-        const detail = await api.get(`/api/documents/${docId}/snapshots/${s.id}`)
-        return detail.data
-      })
-    )
-    setSnapshots(withContent)
-  } catch {
-    console.error('Erreur chargement snapshots')
-  }
-}
-
-  const createSnapshot = async () => {
-    try {
-      await api.post(`/api/documents/${docId}/snapshots`, {
-        name: snapshotName.trim() || undefined
-      })
-      setSnapshotName('')
-      loadSnapshots()
-    } catch {
-      alert('Erreur création snapshot — le document doit être sauvegardé d\'abord')
-    }
   }
 
-  const viewSnapshot = async (snapshotId: string) => {
-    try {
-      const res = await api.get(`/api/documents/${docId}/snapshots/${snapshotId}`)
-      setPreviewSnapshot(res.data)
-    } catch {
-      alert('Erreur chargement snapshot')
-    }
-  }
-
-  const loadComments = async () => {
-    try {
-      const res = await api.get(`/api/documents/${docId}/comments`)
-      setComments(res.data)
-    } catch {
-      console.error('Erreur chargement commentaires')
-    }
-  }
-
-  const postComment = async () => {
-    if (!newComment.trim()) return
-    try {
-      await api.post(`/api/documents/${docId}/comments`, { content: newComment.trim() })
-      setNewComment('')
-      loadComments()
-    } catch {
-      alert('Erreur envoi commentaire')
-    }
-  }
-
-  const postReply = async (parentId: string) => {
-    if (!replyContent.trim()) return
-    try {
-      await api.post(`/api/documents/${docId}/comments`, { content: replyContent.trim(), parentId })
-      setReplyContent('')
-      setReplyTo(null)
-      loadComments()
-    } catch {
-      alert('Erreur envoi réponse')
-    }
-  }
-
-  const resolveComment = async (commentId: string) => {
-    try {
-      await api.patch(`/api/documents/${docId}/comments/${commentId}/resolve`)
-      loadComments()
-    } catch {
-      alert('Erreur résolution commentaire')
-    }
-  }
+  const statusColor = { connecting: 'bg-yellow-400', connected: 'bg-emerald-400', disconnected: 'bg-red-400' }[status]
+  const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
+  const saveLabel = { saved: '✓ Sauvegardé', saving: 'Sauvegarde...', unsaved: '● Non sauvegardé' }[saveStatus]
+  const saveColor = { saved: 'text-emerald-500', saving: 'text-yellow-500', unsaved: 'text-gray-400' }[saveStatus]
 
   return (
-    <div style={{ fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid #eee' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={onBack} style={{ padding: '6px 12px', cursor: 'pointer', background: 'none', border: '1px solid #ddd', borderRadius: 4 }}>
+    <div className="flex flex-col h-screen bg-white font-sans">
+
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-2.5 border-b border-gray-200 bg-white shadow-sm">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors border border-gray-200"
+          >
             ← Retour
           </button>
-          <h3 style={{ margin: 0 }}>📄 {docTitle}</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">📄</span>
+            <span className="font-medium text-gray-800 text-sm">{docTitle}</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
 
+        <div className="flex items-center gap-3">
           {/* Avatars collaborateurs */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div className="flex -space-x-1.5">
             {awarenessUsers.map((u, i) => (
-              <div key={i} title={u.name} style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: u.color, display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 600, color: '#333',
-                border: '2px solid white', cursor: 'default'
-              }}>
+              <div
+                key={i}
+                title={u.name}
+                style={{ background: u.color }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-gray-800 border-2 border-white shadow-sm"
+              >
                 {u.name.charAt(0).toUpperCase()}
               </div>
             ))}
           </div>
 
           {/* Statut sauvegarde */}
-          <span style={{ fontSize: 12, color: saveStatus === 'saved' ? '#10b981' : saveStatus === 'saving' ? '#f59e0b' : '#999' }}>
-            {saveStatus === 'saved' ? '✓ Sauvegardé' : saveStatus === 'saving' ? 'Sauvegarde...' : '● Non sauvegardé'}
-          </span>
+          <span className={`text-xs ${saveColor}`}>{saveLabel}</span>
 
-          {/* Indicateur sync WebSocket */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor }} />
-            <span style={{ fontSize: 13, color: '#666' }}>{statusLabel}</span>
+          {/* Statut sync */}
+          <div className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+            <span className="text-xs text-gray-500">{statusLabel}</span>
           </div>
 
-          <span style={{ color: '#666', fontSize: 14 }}>{user?.email}</span>
-          <button onClick={logout} style={{ padding: '6px 12px', cursor: 'pointer' }}>Déconnexion</button>
-        </div>
-      </div>
+          <NotificationBell onOpenDocument={() => {}} />
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, padding: '8px 24px', borderBottom: '1px solid #eee' }}>
-        <button onClick={() => editor?.chain().focus().toggleBold().run()}
-          style={{ fontWeight: editor?.isActive('bold') ? 'bold' : 'normal', padding: '4px 10px' }}>G</button>
-        <button onClick={() => editor?.chain().focus().toggleItalic().run()}
-          style={{ fontStyle: 'italic', padding: '4px 10px' }}>I</button>
-        <button onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-          style={{ padding: '4px 10px' }}>H1</button>
-        <button onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-          style={{ padding: '4px 10px' }}>H2</button>
-        <button onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          style={{ padding: '4px 10px' }}>Liste</button>
-        <button onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-          style={{ padding: '4px 10px' }}>Code</button>
-          
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={() => exportDocument('html')}
-            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
-            ↓ HTML
-          </button>
-          <button onClick={() => exportDocument('md')}
-            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
-            ↓ Markdown
-          </button>
-          <button onClick={() => exportDocument('pdf')}
-            style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
-            ↓ PDF
+          <span className="text-sm text-gray-500">{user?.email}</span>
+          <button
+            onClick={logout}
+            className="text-sm text-gray-500 hover:text-gray-800 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors border border-gray-200"
+          >
+            Déconnexion
           </button>
         </div>
-        
-        <button
-          onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadSnapshots() }}
-          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showHistory ? '#e8f0fe' : 'white' }}>
-          🕐 Versions
-        </button>
+      </header>
 
-        {snapshots.length >= 2 && (
-          <button onClick={() => setShowDiff(true)}
-            style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
-            🔍 Comparer deux versions
-          </button>
-        )}
-
-        {showDiff && (
-          <SnapshotDiff snapshots={snapshots} onClose={() => setShowDiff(false)} />
-        )}
-
-        <button
-          onClick={() => { setShowComments(!showComments); if (!showComments) loadComments() }}
-          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: showComments ? '#e8f0fe' : 'white' }}>
-          💬 Commentaires
-        </button>
-        <button
-          onClick={() => setShowPermissions(!showPermissions)}
-          style={{ padding: '4px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
-          🔐 Partage
-        </button>
-      
-      </div>
+      {/* Bandeau lecture seule */}
       {(myRole === 'VIEWER' || myRole === 'COMMENTER') && (
-        <div style={{
-          padding: '8px 24px', background: '#fef9c3',
-          borderBottom: '1px solid #fde047', fontSize: 13, color: '#854d0e',
-          display: 'flex', alignItems: 'center', gap: 8
-        }}>
-          {myRole === 'VIEWER' ? '👁 Mode lecture seule' : '💬 Mode commentaire uniquement — édition désactivée'}
+        <div className="px-6 py-2 bg-yellow-50 border-b border-yellow-200 text-sm text-yellow-800 flex items-center gap-2">
+          {myRole === 'VIEWER'
+            ? '👁 Mode lecture seule'
+            : '💬 Mode commentaire uniquement — édition désactivée'}
         </div>
       )}
 
-      {/* Zone principale — éditeur + panel historique */}
-        <div style={{ display: 'flex', flex: 1 }}>
+      {/* Toolbar */}
+      <EditorToolbar
+        editor={editor}
+        myRole={myRole}
+        showHistory={showHistory}
+        showComments={showComments}
+        showPermissions={showPermissions}
+        onToggleHistory={() => { setShowHistory(!showHistory); if (!showHistory) loadSnapshots() }}
+        onToggleComments={() => { setShowComments(!showComments); if (!showComments) loadComments() }}
+        onTogglePermissions={() => setShowPermissions(!showPermissions)}
+        onExport={exportDocument}
+      />
 
-          {/* Éditeur */}
-          <div style={{ flex: 1, padding: 24, maxWidth: showHistory ? 'calc(100% - 300px)' : 800, margin: '0 auto' }}>
+      {/* Zone principale */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* Éditeur */}
+        <div className="flex-1 overflow-y-auto bg-gray-50">
+          <div className="max-w-3xl mx-auto bg-white shadow-sm min-h-full">
             <EditorContent editor={editor} />
           </div>
-
-          {/* Panel historique */}
-          {showHistory && (
-            <div style={{ width: 300, borderLeft: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>🕐 Historique des versions</div>
-
-
-              
-
-              {/* Créer un snapshot */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <input
-                  placeholder="Nom de la version..."
-                  value={snapshotName}
-                  onChange={e => setSnapshotName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && createSnapshot()}
-                  style={{ padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ddd' }}
-                />
-                <button onClick={createSnapshot}
-                  style={{ padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
-                  + Sauvegarder cette version
-                </button>
-              </div>
-
-              <hr style={{ margin: '4px 0' }} />
-
-              {/* Liste des snapshots */}
-              {snapshots.length === 0 ? (
-                <p style={{ color: '#999', fontSize: 13 }}>Aucune version sauvegardée</p>
-              ) : (
-                snapshots.map(s => (
-                  <div key={s.id}
-                    onClick={() => viewSnapshot(s.id)}
-                    style={{ padding: '8px 12px', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer', background: '#fafafa' }}>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{s.name}</div>
-                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-                      {new Date(s.createdAt).toLocaleDateString('fr-FR')} — {s.author.email}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-
-
-          )}
-          {/* Panel commentaires */}
-          {showComments && (
-            <div style={{ width: 300, borderLeft: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>💬 Commentaires</div>
-
-              {/* Nouveau commentaire */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <textarea
-                  placeholder="Ajouter un commentaire..."
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  rows={3}
-                  style={{ padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ddd', resize: 'none' }}
-                />
-                <button onClick={postComment}
-                  style={{ padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
-                  + Commenter
-                </button>
-              </div>
-
-              <hr style={{ margin: '4px 0' }} />
-
-              {/* Liste des commentaires */}
-              {comments.length === 0 ? (
-                <p style={{ color: '#999', fontSize: 13 }}>Aucun commentaire</p>
-              ) : (
-                comments.map(c => (
-                  <div key={c.id} style={{
-                    padding: '10px 12px', border: '1px solid #eee', borderRadius: 8,
-                    background: c.resolved ? '#f8f9fa' : 'white',
-                    opacity: c.resolved ? 0.7 : 1
-                  }}>
-                    {/* Header commentaire */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#1a73e8' }}>{c.author.email}</span>
-                      <span style={{ fontSize: 11, color: '#999' }}>{new Date(c.createdAt).toLocaleDateString('fr-FR')}</span>
-                    </div>
-
-                    {/* Contenu */}
-                    <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.5 }}>{c.content}</p>
-
-                    {/* Réponses */}
-                    {c.replies?.length > 0 && (
-                      <div style={{ marginLeft: 12, borderLeft: '2px solid #eee', paddingLeft: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {c.replies.map((r: any) => (
-                          <div key={r.id}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#666' }}>{r.author.email} </span>
-                            <span style={{ fontSize: 12 }}>{r.content}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    {!c.resolved && (
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button onClick={() => setReplyTo(c)}
-                          style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'none' }}>
-                          Répondre
-                        </button>
-                        <button onClick={() => resolveComment(c.id)}
-                          style={{ fontSize: 12, padding: '2px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #10b981', color: '#10b981', background: 'none' }}>
-                          ✓ Résoudre
-                        </button>
-                      </div>
-                    )}
-                    {c.resolved && <span style={{ fontSize: 11, color: '#10b981' }}>✓ Résolu</span>}
-
-                    {/* Zone de réponse */}
-                    {replyTo?.id === c.id && (
-                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <textarea
-                          placeholder="Votre réponse..."
-                          value={replyContent}
-                          onChange={e => setReplyContent(e.target.value)}
-                          rows={2}
-                          style={{ padding: '4px 8px', fontSize: 12, borderRadius: 4, border: '1px solid #ddd', resize: 'none' }}
-                        />
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button onClick={() => postReply(c.id)}
-                            style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
-                            Envoyer
-                          </button>
-                          <button onClick={() => setReplyTo(null)}
-                            style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'none' }}>
-                            Annuler
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-
-
-
-
         </div>
 
-        {/* Modal preview snapshot */}
-        {previewSnapshot && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div style={{ background: 'white', borderRadius: 12, padding: 24, width: '70vw', maxHeight: '80vh', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>📄 {previewSnapshot.name}</h3>
-                <button onClick={() => setPreviewSnapshot(null)}
-                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#666' }}>✕</button>
-              </div>
-              <div style={{ fontSize: 12, color: '#999' }}>
-                {new Date(previewSnapshot.createdAt).toLocaleDateString('fr-FR')}
-              </div>
-              <div
-                style={{ padding: 16, border: '1px solid #eee', borderRadius: 8, lineHeight: 1.6 }}
-                dangerouslySetInnerHTML={{ __html: previewSnapshot.content }}
-              />
-            </div>
-          </div>
-        )}
-        {showPermissions && (
-          <DocumentPermissions
-            docId={docId}
-            docTitle={docTitle}
-            workspaceId={workspaceId}
-            onClose={() => setShowPermissions(false)}
+        {/* Panel Versions */}
+        {showHistory && (
+          <HistoryPanel
+            snapshots={snapshots}
+            snapshotName={snapshotName}
+            onSnapshotNameChange={setSnapshotName}
+            onCreateSnapshot={createSnapshot}
+            onViewSnapshot={viewSnapshot}
+            onShowDiff={() => setShowDiff(true)}
           />
         )}
+
+        {/* Panel Commentaires */}
+        {showComments && (
+          <CommentsPanel
+            comments={comments}
+            newComment={newComment}
+            replyTo={replyTo}
+            replyContent={replyContent}
+            onNewCommentChange={setNewComment}
+            onPostComment={postComment}
+            onSetReplyTo={setReplyTo}
+            onReplyContentChange={setReplyContent}
+            onPostReply={postReply}
+            onResolve={resolveComment}
+          />
+        )}
+      </div>
+
+      {/* Modals */}
+      {previewSnapshot && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[70vw] max-h-[80vh] overflow-auto flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold text-gray-800">📄 {previewSnapshot.name}</h3>
+              <button onClick={() => setPreviewSnapshot(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="text-xs text-gray-400">
+              {new Date(previewSnapshot.createdAt).toLocaleDateString('fr-FR')}
+            </div>
+            <div
+              className="p-4 border border-gray-200 rounded-lg leading-relaxed text-sm"
+              dangerouslySetInnerHTML={{ __html: previewSnapshot.content }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showDiff && (
+        <SnapshotDiff snapshots={snapshots} onClose={() => setShowDiff(false)} />
+      )}
+
+      {showPermissions && (
+        <DocumentPermissions
+          docId={docId}
+          docTitle={docTitle}
+          workspaceId={workspaceId}
+          onClose={() => setShowPermissions(false)}
+        />
+      )}
     </div>
   )
 }

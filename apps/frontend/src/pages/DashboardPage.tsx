@@ -3,6 +3,8 @@ import { api } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import ImportButton from '../components/ImportButton'
 import SearchBar from '../components/SearchBar'
+import NotificationBell from '../components/NotificationBell'
+
 interface Workspace {
   id: string
   name: string
@@ -41,6 +43,7 @@ export default function DashboardPage({ onOpenDocument }: Props) {
   const [showMembers, setShowMembers] = useState(false)
   const [members, setMembers] = useState<Member[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('MEMBER')
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
 
@@ -109,7 +112,7 @@ export default function DashboardPage({ onOpenDocument }: Props) {
     try {
       const res = await api.post(`/api/workspaces/${activeWorkspace.id}/members`, {
         email: inviteEmail.trim(),
-        role: 'MEMBER'
+        role: inviteRole
       })
       setMembers(prev => [...prev, res.data])
       setInviteSuccess(`${inviteEmail} a été invité`)
@@ -130,48 +133,39 @@ export default function DashboardPage({ onOpenDocument }: Props) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif' }}>
+    <div className="flex h-screen bg-gray-50 font-sans">
 
       {/* Modal membres */}
       {showMembers && activeWorkspace && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-        }}>
-          <div style={{
-            background: 'white', borderRadius: 12, padding: 24,
-            width: 420, maxHeight: '80vh', overflow: 'auto',
-            display: 'flex', flexDirection: 'column', gap: 16
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>👥 Membres — {activeWorkspace.name}</h3>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[440px] max-h-[80vh] overflow-auto flex flex-col gap-4 shadow-xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-gray-800">👥 Membres</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{activeWorkspace.name}</p>
+              </div>
               <button onClick={() => setShowMembers(false)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#666' }}>
-                ✕
-              </button>
+                className="text-gray-400 hover:text-gray-700 text-lg cursor-pointer">✕</button>
             </div>
 
-            {/* Liste des membres */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Liste membres */}
+            <div className="flex flex-col gap-2">
               {members.map(m => (
-                <div key={m.user.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 12px', border: '1px solid #eee', borderRadius: 8
-                }}>
+                <div key={m.user.id}
+                  className="flex justify-between items-center px-3 py-2.5 border border-gray-100 rounded-lg bg-gray-50">
                   <div>
-                    <span style={{ fontWeight: 500 }}>{m.user.email}</span>
-                    <span style={{
-                      marginLeft: 8, fontSize: 11, padding: '2px 6px',
-                      borderRadius: 4, background: m.role === 'ADMIN' ? '#e8f0fe' : '#f1f3f4',
-                      color: m.role === 'ADMIN' ? '#1a73e8' : '#666'
-                    }}>
+                    <span className="text-sm font-medium text-gray-800">{m.user.email}</span>
+                    <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
+                      m.role === 'ADMIN'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>
                       {m.role}
                     </span>
                   </div>
-                  {/* Ne pas pouvoir se retirer soi-même */}
                   {m.user.id !== user?.id && activeWorkspace.role === 'ADMIN' && (
                     <button onClick={() => removeMember(m.user.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13 }}>
+                      className="text-xs text-red-500 hover:text-red-700 cursor-pointer">
                       Retirer
                     </button>
                   )}
@@ -179,25 +173,33 @@ export default function DashboardPage({ onOpenDocument }: Props) {
               ))}
             </div>
 
-            {/* Inviter un membre — seulement si ADMIN */}
+            {/* Inviter */}
             {activeWorkspace.role === 'ADMIN' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid #eee', paddingTop: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>Inviter par email</div>
-                <div style={{ display: 'flex', gap: 8 }}>
+              <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+                <span className="text-sm font-medium text-gray-700">Inviter par email</span>
+                <div className="flex gap-2">
                   <input
                     placeholder="email@exemple.com"
                     value={inviteEmail}
                     onChange={e => setInviteEmail(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && inviteMember()}
-                    style={{ flex: 1, padding: '8px 12px', borderRadius: 4, border: '1px solid #ddd', fontSize: 14 }}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
                   />
+                  <select
+                    value={inviteRole}
+                    onChange={e => setInviteRole(e.target.value)}
+                    className="px-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="MEMBER">Membre</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
                   <button onClick={inviteMember}
-                    style={{ padding: '8px 16px', background: '#1a73e8', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 cursor-pointer">
                     Inviter
                   </button>
                 </div>
-                {inviteError && <p style={{ color: '#ef4444', margin: 0, fontSize: 13 }}>{inviteError}</p>}
-                {inviteSuccess && <p style={{ color: '#10b981', margin: 0, fontSize: 13 }}>✓ {inviteSuccess}</p>}
+                {inviteError && <p className="text-xs text-red-500">{inviteError}</p>}
+                {inviteSuccess && <p className="text-xs text-emerald-500">✓ {inviteSuccess}</p>}
               </div>
             )}
           </div>
@@ -205,106 +207,182 @@ export default function DashboardPage({ onOpenDocument }: Props) {
       )}
 
       {/* Sidebar */}
-      <div style={{ width: 240, borderRight: '1px solid #eee', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ fontWeight: 'bold', marginBottom: 8 }}>👤 {user?.email}</div>
-        <hr />
-        <div style={{ fontWeight: 600, fontSize: 13, color: '#666' }}>WORKSPACES</div>
-
-        {workspaces.map(ws => (
-          <button key={ws.id} onClick={() => setActiveWorkspace(ws)}
-            style={{
-              padding: '8px 12px', textAlign: 'left', border: 'none', borderRadius: 6, cursor: 'pointer',
-              background: activeWorkspace?.id === ws.id ? '#e8f0fe' : 'transparent',
-              fontWeight: activeWorkspace?.id === ws.id ? 600 : 400
-            }}>
-            📁 {ws.name}
-          </button>
-        ))}
-
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <input placeholder="Nouveau workspace..." value={newWorkspaceName}
-            onChange={e => setNewWorkspaceName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && createWorkspace()}
-            style={{ padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ddd' }} />
-          <button onClick={createWorkspace}
-            style={{ padding: '6px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd' }}>
-            + Créer
-          </button>
+      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
+        {/* User */}
+        <div className="px-4 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-semibold">
+              {user?.email?.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-xs text-gray-600 truncate">{user?.email}</span>
+          </div>
         </div>
 
-        <div style={{ marginTop: 'auto' }}>
-            <button onClick={logout}
-              style={{ width: '100%', padding: 8, cursor: 'pointer', background: 'none', border: '1px solid #ddd', borderRadius: 4, color: '#666' }}>
-              Déconnexion
+        {/* Workspaces */}
+        <div className="flex-1 overflow-y-auto px-2 py-3">
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2 mb-2">
+            Espaces de travail
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {workspaces.map(ws => (
+              <button
+                key={ws.id}
+                onClick={() => setActiveWorkspace(ws)}
+                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors cursor-pointer flex items-center gap-2 ${
+                  activeWorkspace?.id === ws.id
+                    ? 'bg-blue-50 text-blue-700 font-medium'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <span className="text-base">📁</span>
+                <span className="truncate">{ws.name}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Créer workspace */}
+          <div className="mt-3 px-1 flex flex-col gap-1.5">
+            <input
+              placeholder="Nouveau workspace..."
+              value={newWorkspaceName}
+              onChange={e => setNewWorkspaceName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createWorkspace()}
+              className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 w-full"
+            />
+            <button
+              onClick={createWorkspace}
+              className="w-full py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 cursor-pointer"
+            >
+              + Créer
             </button>
           </div>
         </div>
 
+        {/* Déconnexion */}
+        <div className="px-3 py-3 border-t border-gray-100">
+          <button
+            onClick={logout}
+            className="w-full py-2 text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+          >
+            Déconnexion
+          </button>
+        </div>
+      </aside>
+
       {/* Zone principale */}
-      <div style={{ flex: 1, padding: 32 }}>
-        {!activeWorkspace ? (
-          <div style={{ color: '#999', marginTop: 80, textAlign: 'center' }}>
-            <p style={{ fontSize: 18 }}>Crée ou sélectionne un workspace pour commencer</p>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ margin: 0 }}>📁 {activeWorkspace.name}</h2>
-              <SearchBar
-                workspaceId={activeWorkspace.id}
-                onOpenDocument={onOpenDocument}
-              />
-              <button onClick={openMembers}
-                style={{ padding: '8px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 4, border: '1px solid #ddd', background: 'white' }}>
-                👥 Membres
-              </button>
-            </div>
+      <main className="flex-1 flex flex-col overflow-hidden">
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-              <input placeholder="Titre du document..." value={newDocTitle}
-                onChange={e => setNewDocTitle(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && createDocument()}
-                style={{ padding: '8px 12px', fontSize: 14, borderRadius: 4, border: '1px solid #ddd', flex: 1 }} />
-              <button onClick={createDocument}
-                style={{ padding: '8px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 4, border: 'none', background: '#1a73e8', color: 'white' }}>
-                + Nouveau document
-              </button>
-            </div>
+        {/* Header principal */}
+        <div className="px-8 py-4 bg-white border-b border-gray-200 flex items-center justify-between">
+          {activeWorkspace ? (
+            <>
+              <div className="flex items-center gap-3">
+                <span className="text-lg">📁</span>
+                <h2 className="font-semibold text-gray-800">{activeWorkspace.name}</h2>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                  activeWorkspace.role === 'ADMIN'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {activeWorkspace.role}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <SearchBar
+                  workspaceId={activeWorkspace.id}
+                  onOpenDocument={(docId) => onOpenDocument(docId, activeWorkspace.id)}
+                />
+                <NotificationBell onOpenDocument={(docId) => onOpenDocument(docId, activeWorkspace?.id ?? '')} />
+                <button
+                  onClick={openMembers}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 cursor-pointer"
+                >
+                  👥 Membres
+                </button>
+              </div>
+            </>
+          ) : (
+            <h2 className="font-semibold text-gray-500">Sélectionne un workspace</h2>
+          )}
+        </div>
 
-            {activeWorkspace && (
-              <div style={{ marginBottom: 16 }}>
+        {/* Contenu */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          {!activeWorkspace ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-5xl mb-4">📁</div>
+              <p className="text-gray-500 text-lg font-medium">Aucun workspace sélectionné</p>
+              <p className="text-gray-400 text-sm mt-1">Crée ou sélectionne un workspace dans la sidebar</p>
+            </div>
+          ) : (
+            <>
+              {/* Actions */}
+              <div className="flex gap-3 mb-6">
+                <input
+                  placeholder="Titre du document..."
+                  value={newDocTitle}
+                  onChange={e => setNewDocTitle(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createDocument()}
+                  className="flex-1 px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white"
+                />
+                <button
+                  onClick={createDocument}
+                  className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  + Nouveau document
+                </button>
+              </div>
+
+              {/* Import */}
+              <div className="mb-6">
                 <ImportButton
-                 workspaceId={activeWorkspace.id}
+                  workspaceId={activeWorkspace.id}
                   onImported={(doc) => setDocuments(prev => [doc, ...prev])}
-                 />
+                />
+              </div>
+
+              {error && (
+                <div className="mb-4 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                  {error}
                 </div>
               )}
 
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-
-            {loading ? (
-              <p style={{ color: '#999' }}>Chargement...</p>
-            ) : documents.length === 0 ? (
-              <p style={{ color: '#999' }}>Aucun document dans ce workspace.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {documents.map(doc => (
-                  <div key={doc.id} onClick={() => onOpenDocument(doc.id, activeWorkspace.id)}
-                    style={{
-                      padding: '12px 16px', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa'
-                    }}>
-                    <span style={{ fontWeight: 500 }}>📄 {doc.title}</span>
-                    <span style={{ fontSize: 12, color: '#999' }}>
-                      {new Date(doc.updatedAt).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              {/* Liste documents */}
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-400 text-sm">Chargement...</div>
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="text-4xl mb-3">📄</div>
+                  <p className="text-gray-500 font-medium">Aucun document</p>
+                  <p className="text-gray-400 text-sm mt-1">Crée ton premier document ci-dessus</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {documents.map(doc => (
+                    <div
+                      key={doc.id}
+                      onClick={() => onOpenDocument(doc.id, activeWorkspace.id)}
+                      className="flex items-center justify-between px-5 py-3.5 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-400 group-hover:text-blue-500 transition-colors">📄</span>
+                        <span className="text-sm font-medium text-gray-800">{doc.title}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        {new Date(doc.updatedAt).toLocaleDateString('fr-FR', {
+                          day: 'numeric', month: 'short', year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
     </div>
   )
 }
