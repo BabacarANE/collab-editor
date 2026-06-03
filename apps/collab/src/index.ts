@@ -11,46 +11,50 @@ const JWT_SECRET = process.env.JWT_SECRET ?? 'dev_secret'
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://redis:6379'
 const KAFKA_BROKER = process.env.KAFKA_BROKER ?? 'kafka:29092'
 
-// ─── Redis ───────────────────────────────────────────────────────────────────
 const publisher  = createClient({ url: REDIS_URL })
 const subscriber = createClient({ url: REDIS_URL })
 
-// ─── Kafka Producer ──────────────────────────────────────────────────────────
-// Le producer publie chaque update Yjs dans le topic 'doc-operations'
-// kafkajs gère la connexion, les retries et le batching automatiquement
 const kafka = new Kafka({
   clientId: 'collab-server',
   brokers: [KAFKA_BROKER],
-  retry: { retries: 5 }
+  retry: { retries: 3 }
 })
 const producer = kafka.producer()
 
-// Map locale : docId → Set de WebSockets connectés sur CETTE instance
 const docClients = new Map<string, Set<WebSocket>>()
 
+// ─── Kafka — connexion non-bloquante avec retry ──────────────────────────────
+async function connectKafka(): Promise<void> {
+  try {
+    await producer.connect()
+    console.log('[collab] Kafka producer connecté')
+
+    const admin = kafka.admin()
+    await admin.connect()
+    const topics = await admin.listTopics()
+    if (!topics.includes('doc-operations')) {
+      await admin.createTopics({
+        topics: [{ topic: 'doc-operations', numPartitions: 3, replicationFactor: 1 }]
+      })
+      console.log('[collab] Topic doc-operations créé')
+    }
+    await admin.disconnect()
+  } catch (err) {
+    console.error('[collab] Kafka non disponible, retry dans 10s')
+    setTimeout(() => connectKafka(), 10000)
+  }
+}
+
 async function start() {
-  // Connexions Redis
+  // Redis — bloquant (critique)
   await publisher.connect()
   await subscriber.connect()
   console.log('[collab] Redis connecté')
 
-  // Connexion Kafka producer
-  await producer.connect()
-  console.log('[collab] Kafka producer connecté')
+  // Kafka — non-bloquant (le serveur WS démarre même si Kafka est down)
+  connectKafka()
 
-  // Créer le topic si nécessaire
-  const admin = kafka.admin()
-  await admin.connect()
-  const topics = await admin.listTopics()
-  if (!topics.includes('doc-operations')) {
-    await admin.createTopics({
-      topics: [{ topic: 'doc-operations', numPartitions: 3, replicationFactor: 1 }]
-    })
-    console.log('[collab] Topic doc-operations créé')
-  }
-  await admin.disconnect()
-
-  // ─── Redis Pub/Sub — sync inter-instances ────────────────────────────────
+  // Redis Pub/Sub
   await subscriber.pSubscribe('doc:*', (message, channel) => {
     const docId = channel.replace('doc:', '')
     const update = Buffer.from(message, 'base64')
@@ -58,11 +62,10 @@ async function start() {
     Y.applyUpdate(ydoc, update, 'redis')
   })
 
-  // ─── Serveur HTTP ────────────────────────────────────────────────────────
   const server = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200)
-      res.end(JSON.stringify({ status: 'ok', redis: 'connected', kafka: 'connected' }))
+      res.end(JSON.stringify({ status: 'ok' }))
       return
     }
     res.writeHead(404)
@@ -76,7 +79,6 @@ async function start() {
     const token = url.searchParams.get('token')
     const docId = url.pathname.slice(1)
 
-    // Auth JWT
     if (!token) { ws.close(4001, 'Token manquant'); return }
     try {
       jwt.verify(token, JWT_SECRET)
@@ -86,7 +88,6 @@ async function start() {
 
     console.log(`[collab] Connexion acceptée — docId: ${docId}`)
 
-    // Enregistrer le client localement
     if (!docClients.has(docId)) docClients.set(docId, new Set())
     docClients.get(docId)!.add(ws)
 
@@ -97,23 +98,21 @@ async function start() {
     const updateHandler = async (update: Uint8Array, origin: any) => {
       if (origin === 'redis') return
 
-      // 1. Publier sur Redis pour les autres instances collab
       publisher.publish(`doc:${docId}`, Buffer.from(update).toString('base64'))
         .catch(err => console.error('[collab] Erreur Redis publish:', err))
 
-      // 2. Publier sur Kafka pour la persistence
-      // La clé est le docId — Kafka garantit l'ordre des messages par clé
-      producer.send({
-        topic: 'doc-operations',
-        messages: [{
-          key: docId,
-          value: Buffer.from(update),
-          headers: {
-            docId,
-            timestamp: Date.now().toString()
-          }
-        }]
-      }).catch(err => console.error('[collab] Erreur Kafka publish:', err))
+      try {
+        await producer.send({
+          topic: 'doc-operations',
+          messages: [{
+            key: docId,
+            value: Buffer.from(update),
+            headers: { docId, timestamp: Date.now().toString() }
+          }]
+        })
+      } catch {
+        console.warn('[collab] Kafka indisponible — opération non persistée')
+      }
     }
 
     ydoc.on('update', updateHandler)
@@ -138,9 +137,7 @@ async function start() {
   })
 }
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[collab] Arrêt graceful...')
   await producer.disconnect()
   await publisher.disconnect()
   await subscriber.disconnect()

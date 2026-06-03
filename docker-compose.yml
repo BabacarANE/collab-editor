@@ -95,22 +95,26 @@ services:
         condition: service_healthy
 
   collab:
-    image: node:20-slim
-    working_dir: /app/apps/collab
-    command: sh -c "npm install && npm run dev"
-    ports:
-      - "4000:4000"
-    volumes:
-      - .:/app
-      - collab_node_modules:/app/apps/collab/node_modules
-    environment:
-      JWT_SECRET: change_me_in_production
-      REDIS_URL: redis://redis:6379
-      KAFKA_BROKER: kafka:29092
-      COLLAB_PORT: 4000
-    depends_on:
-      - api
-      - redis
+      image: node:20-slim
+      working_dir: /app/apps/collab
+      command: sh -c "npm install && npm run dev"
+      ports:
+        - "4000:4000"
+      volumes:
+        - .:/app
+        - collab_node_modules:/app/apps/collab/node_modules
+      environment:
+        JWT_SECRET: change_me_in_production
+        COLLAB_PORT: 4000
+        REDIS_URL: redis://redis:6379
+        KAFKA_BROKER: kafka:29092
+      depends_on:
+        api:
+          condition: service_started
+        redis:
+          condition: service_healthy
+        kafka:
+          condition: service_healthy
 
   frontend:
     image: node:20-slim
