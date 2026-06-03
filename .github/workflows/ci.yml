@@ -36,7 +36,7 @@ jobs:
       - name: Type check Frontend
         run: pnpm --filter frontend exec tsc --noEmit
 
-  # ─── Job 2 : Build Docker images ───────────────────────────────────────────
+  # ─── Job 2 : Build Docker images  ───────────────────────────────────────────
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
@@ -112,3 +112,4 @@ jobs:
           format: table
           exit-code: '0'
           severity: CRITICAL,HIGH
+  # ─── other jobs  ─────────────────────────────────────────────────
