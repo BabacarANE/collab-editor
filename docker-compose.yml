@@ -106,6 +106,7 @@ services:
     environment:
       JWT_SECRET: change_me_in_production
       REDIS_URL: redis://redis:6379
+      KAFKA_BROKER: kafka:29092
       COLLAB_PORT: 4000
     depends_on:
       - api
@@ -122,8 +123,25 @@ services:
     depends_on:
       - api
 
+  persistence:
+      image: node:20-slim
+      working_dir: /app/apps/persistence
+      command: sh -c "apt-get update -y && apt-get install -y openssl && npm install && npm run prisma:generate && npm run dev"
+      volumes:
+        - .:/app
+        - persistence_node_modules:/app/apps/persistence/node_modules
+      environment:
+        DATABASE_URL: postgresql://collabuser:collabpass123@postgres:5432/collab
+        KAFKA_BROKER: kafka:29092
+      depends_on:
+        postgres:
+          condition: service_healthy
+        kafka:
+          condition: service_started
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
   collab_node_modules:
+  persistence_node_modules:

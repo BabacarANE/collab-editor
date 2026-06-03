@@ -2,7 +2,16 @@
   "name": "@collab/persistence",
   "version": "0.1.0",
   "scripts": {
-    "dev": "echo 'a configurer phase 2'",
-    "build": "tsc"
+    "dev": "tsx watch src/index.ts",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "@prisma/client": "4.16.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "prisma": "4.16.2"
   }
 }
