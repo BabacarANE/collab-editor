@@ -19,6 +19,7 @@
   "dependencies": {
     "esbuild": "^0.28.0",
     "jsonwebtoken": "^9.0.3",
+    "redis": "^6.0.0",
     "undici-types": "^7.24.6",
     "ws": "^8.21.0",
     "y-websocket": "^1.5.4",

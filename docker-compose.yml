@@ -105,9 +105,11 @@ services:
       - collab_node_modules:/app/apps/collab/node_modules
     environment:
       JWT_SECRET: change_me_in_production
+      REDIS_URL: redis://redis:6379
       COLLAB_PORT: 4000
     depends_on:
       - api
+      - redis
 
   frontend:
     image: node:20-slim
