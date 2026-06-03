@@ -22,7 +22,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
 
     // On crée le workspace ET on ajoute le créateur comme ADMIN
     // en une seule transaction — soit tout passe, soit rien
-    const workspace = await prisma.$transaction(async (tx) => {
+    const workspace = await prisma.$transaction(async (tx: any) => {
       const ws = await tx.workspace.create({
         data: { name: name.trim() }
       })

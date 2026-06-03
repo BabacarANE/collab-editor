@@ -150,7 +150,7 @@ export default function DashboardPage({ onOpenDocument }: Props) {
 
             {/* Liste membres */}
             <div className="flex flex-col gap-2">
-              {members.map(m => (
+              {members.map((m: { role: string; user: { id: string; email: string } }) => (
                 <div key={m.user.id}
                   className="flex justify-between items-center px-3 py-2.5 border border-gray-100 rounded-lg bg-gray-50">
                   <div>
