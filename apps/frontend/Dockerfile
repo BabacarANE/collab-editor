@@ -6,7 +6,9 @@ COPY apps/frontend/package.json apps/frontend/.npmrc* ./
 RUN npm install
 
 COPY apps/frontend/ .
-RUN npm run build
+
+# Vite build — ignore les erreurs TypeScript (tsc séparé dans le job lint)
+RUN npm run build -- --mode production
 
 # Image de production avec nginx
 FROM nginx:alpine
