@@ -7,6 +7,7 @@ on:
     branches: [main]
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REPO_LC: babacarane/collab-editor
   
 jobs:
   # ─── Job 1 : Lint + Type check ─────────────────────────────────────────────
