@@ -197,9 +197,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     })
 
     // On renvoie juste les workspaces, pas les memberships
-    const workspaces = memberships.map(m => ({
-        ...m.workspace,
-        role: m.role
+    const workspaces = memberships.map((m: { role: string; workspace: { id: string; name: string; createdAt: Date; updatedAt: Date } }) => ({
+      ...m.workspace,
+      role: m.role
     }))
 
     return reply.send(workspaces)
