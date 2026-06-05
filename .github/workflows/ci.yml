@@ -96,6 +96,7 @@ jobs:
           tags: ghcr.io/${{ env.REPO_LC }}/frontend:latest,ghcr.io/${{ env.REPO_LC }}/frontend:${{ github.sha }}
           build-args: |
             VITE_API_URL=http://collab.local:8080
+            VITE_COLLAB_URL=ws://collab.local:8080/ws
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

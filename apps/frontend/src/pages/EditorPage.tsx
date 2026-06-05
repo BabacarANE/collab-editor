@@ -104,6 +104,13 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
     return () => provider.disconnect()
   }, [])
 
+  const provider = new WebsocketProvider(
+    import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000',
+    docId,
+    ydoc,
+    { params: { token: accessToken ?? '' } }
+  )
+
   // Éditeur
   const editor = useEditor({
     extensions: [
