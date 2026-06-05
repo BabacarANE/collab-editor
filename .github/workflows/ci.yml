@@ -94,6 +94,8 @@ jobs:
           file: ./apps/frontend/Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ env.REPO_LC }}/frontend:latest,ghcr.io/${{ env.REPO_LC }}/frontend:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=http://collab.local:8080
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

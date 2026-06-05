@@ -7,7 +7,10 @@ RUN npm install
 
 COPY apps/frontend/ .
 
-# Vite build — ignore les erreurs TypeScript (tsc séparé dans le job lint)
+# Variable d'environnement Vite pour pointer vers l'Ingress
+ARG VITE_API_URL=http://localhost:3000
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build -- --mode production
 
 # Image de production avec nginx
