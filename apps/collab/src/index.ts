@@ -5,12 +5,40 @@ import { setupWSConnection, getYDoc } from 'y-websocket/bin/utils'
 import { createClient } from 'redis'
 import { Kafka } from 'kafkajs'
 import * as Y from 'yjs'
+import { Registry, Gauge, Counter, Histogram, collectDefaultMetrics } from 'prom-client'
 
 const PORT = Number(process.env.COLLAB_PORT) || 4000
+const METRICS_PORT = Number(process.env.METRICS_PORT) || 9091
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev_secret'
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://redis:6379'
 const KAFKA_BROKER = process.env.KAFKA_BROKER ?? 'kafka:29092'
 
+// ─── Métriques Prometheus ────────────────────────────────────────────────────
+const registry = new Registry()
+collectDefaultMetrics({ register: registry })
+
+const wsConnections = new Gauge({
+  name: 'collab_websocket_connections_active',
+  help: 'Nombre de connexions WebSocket actives',
+  labelNames: ['docId'],
+  registers: [registry]
+})
+
+const opsTotal = new Counter({
+  name: 'collab_operations_total',
+  help: 'Nombre total d\'opérations Yjs reçues',
+  labelNames: ['docId'],
+  registers: [registry]
+})
+
+const opDuration = new Histogram({
+  name: 'collab_operation_duration_seconds',
+  help: 'Durée de traitement des opérations Yjs',
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5],
+  registers: [registry]
+})
+
+// ─── Redis + Kafka (inchangé) ────────────────────────────────────────────────
 const publisher  = createClient({ url: REDIS_URL })
 const subscriber = createClient({ url: REDIS_URL })
 
@@ -23,7 +51,6 @@ const producer = kafka.producer()
 
 const docClients = new Map<string, Set<WebSocket>>()
 
-// ─── Kafka — connexion non-bloquante avec retry ──────────────────────────────
 async function connectKafka(): Promise<void> {
   try {
     await producer.connect()
@@ -46,15 +73,12 @@ async function connectKafka(): Promise<void> {
 }
 
 async function start() {
-  // Redis — bloquant (critique)
   await publisher.connect()
   await subscriber.connect()
   console.log('[collab] Redis connecté')
 
-  // Kafka — non-bloquant (le serveur WS démarre même si Kafka est down)
   connectKafka()
 
-  // Redis Pub/Sub
   await subscriber.pSubscribe('doc:*', (message, channel) => {
     const docId = channel.replace('doc:', '')
     const update = Buffer.from(message, 'base64')
@@ -62,10 +86,16 @@ async function start() {
     Y.applyUpdate(ydoc, update, 'redis')
   })
 
-  const server = http.createServer((req, res) => {
+  // ─── Serveur HTTP — WebSocket + /health + /metrics ──────────────────────
+  const server = http.createServer(async (req, res) => {
     if (req.url === '/health') {
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
+      return
+    }
+    if (req.url === '/metrics') {
+      res.writeHead(200, { 'Content-Type': registry.contentType })
+      res.end(await registry.metrics())
       return
     }
     res.writeHead(404)
@@ -91,12 +121,19 @@ async function start() {
     if (!docClients.has(docId)) docClients.set(docId, new Set())
     docClients.get(docId)!.add(ws)
 
+    // ── Incrémenter les connexions actives ──
+    wsConnections.inc({ docId })
+
     setupWSConnection(ws, req)
 
     const ydoc = getYDoc(docId)
 
     const updateHandler = async (update: Uint8Array, origin: any) => {
       if (origin === 'redis') return
+
+      // ── Mesurer la durée de traitement ──
+      const end = opDuration.startTimer()
+      opsTotal.inc({ docId })
 
       publisher.publish(`doc:${docId}`, Buffer.from(update).toString('base64'))
         .catch(err => console.error('[collab] Erreur Redis publish:', err))
@@ -113,11 +150,16 @@ async function start() {
       } catch {
         console.warn('[collab] Kafka indisponible — opération non persistée')
       }
+
+      end()
     }
 
     ydoc.on('update', updateHandler)
 
     ws.on('close', () => {
+      // ── Décrémenter les connexions actives ──
+      wsConnections.dec({ docId })
+
       const clients = docClients.get(docId)
       if (clients) {
         clients.delete(ws)
@@ -134,6 +176,7 @@ async function start() {
 
   server.listen(PORT, () => {
     console.log(`[collab] Serveur WebSocket démarré sur le port ${PORT}`)
+    console.log(`[collab] Métriques disponibles sur http://localhost:${PORT}/metrics`)
   })
 }
 
