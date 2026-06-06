@@ -75,10 +75,14 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   }, [docId])
 
   // WebSocket + awareness
+
   useEffect(() => {
-    const provider = new WebsocketProvider('ws://localhost:4000', docId, ydoc, {
-      params: { token: accessToken ?? '' }
-    })
+    const provider = new WebsocketProvider(
+      import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000',
+      docId,
+      ydoc,
+      { params: { token: accessToken ?? '' } }
+    )
     provider.awareness.setLocalStateField('user', {
       name: user?.email ?? 'Anonyme',
       color: userColor(user?.id ?? 'anon')
@@ -104,12 +108,7 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
     return () => provider.disconnect()
   }, [])
 
-  const provider = new WebsocketProvider(
-    import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000',
-    docId,
-    ydoc,
-    { params: { token: accessToken ?? '' } }
-  )
+
 
   // Éditeur
   const editor = useEditor({
