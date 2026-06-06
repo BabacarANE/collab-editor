@@ -7,9 +7,11 @@ RUN npm install
 
 COPY apps/frontend/ .
 
-# Variable d'environnement Vite pour pointer vers l'Ingress
+# Variables d'environnement Vite pour pointer vers l'Ingress
 ARG VITE_API_URL=http://localhost:3000
+ARG VITE_COLLAB_URL=ws://localhost:4000
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_COLLAB_URL=$VITE_COLLAB_URL
 
 RUN npm run build -- --mode production
 
