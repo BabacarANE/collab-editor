@@ -64,8 +64,7 @@ jobs:
           file: ./apps/api/Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ env.REPO_LC }}/api:latest,ghcr.io/${{ env.REPO_LC }}/api:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
 
       - name: Build & push Collab image
         uses: docker/build-push-action@v5
