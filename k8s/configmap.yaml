@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: collab-config
+  namespace: collab
+data:
+  DATABASE_URL: "postgresql://collabuser:collabpass123@postgres:5432/collab"
+  REDIS_URL: "redis://redis:6379"
+  KAFKA_BROKERS: "kafka:29092"
+  API_URL: "http://api:3000"
+  COLLAB_PORT: "4000"
+  PORT: "3000"

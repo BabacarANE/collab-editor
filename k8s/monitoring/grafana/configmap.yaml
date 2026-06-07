@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus.monitoring.svc:9090
+        isDefault: true
+        editable: true
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        folder: Collab Editor
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-collab
+  namespace: monitoring
+data:
+  collab.json: |
+    {
+      "title": "Collab Editor — WebSocket",
+      "uid": "collab-ws",
+      "timezone": "browser",
+      "refresh": "10s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Connexions WebSocket actives",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+          "targets": [{
+            "expr": "sum(collab_websocket_connections_active)",
+            "legendFormat": "Connexions"
+          }]
+        },
+        {
+          "id": 2,
+          "title": "Opérations Yjs / seconde",
+          "type": "stat",
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+          "targets": [{
+            "expr": "sum(rate(collab_operations_total[1m]))",
+            "legendFormat": "ops/sec"
+          }]
+        },
+        {
+          "id": 3,
+          "title": "Latence opérations p95",
+          "type": "stat",
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum(rate(collab_operation_duration_seconds_bucket[1m])) by (le))",
+            "legendFormat": "p95"
+          }]
+        },
+        {
+          "id": 4,
+          "title": "Connexions actives par pod",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "collab_websocket_connections_active",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 5,
+          "title": "Opérations totales par pod",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "rate(collab_operations_total[1m])",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 6,
+          "title": "CPU usage pods collab",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "rate(process_cpu_seconds_total{app=\"collab\"}[1m])",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 7,
+          "title": "Mémoire utilisée pods collab",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "process_resident_memory_bytes{app=\"collab\"}",
+            "legendFormat": "{{pod}}"
+          }]
+        }
+      ]
+    }

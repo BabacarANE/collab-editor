@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: collab
+spec:
+  selector:
+    app: kafka
+  ports:
+    - port: 29092
+      targetPort: 29092
+  clusterIP: None

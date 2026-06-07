@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager.monitoring.svc:9093']
+
+    rule_files:
+      - /etc/prometheus/rules.yml
+
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+
+  rules.yml: |
+    groups:
+      - name: collab-alerts
+        rules:
+
+          - alert: CollabPodCrash
+            expr: increase(kube_pod_container_status_restarts_total{namespace="collab", container="collab"}[5m]) > 2
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod collab en crash loop"
+              description: "Le pod {{ $labels.pod }} a redémarré plus de 2 fois en 5 minutes."
+
+          - alert: CollabHighLatency
+            expr: histogram_quantile(0.95, sum(rate(collab_operation_duration_seconds_bucket[1m])) by (le)) > 0.1
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Latence p95 élevée"
+              description: "La latence p95 des opérations Yjs dépasse 100ms depuis 2 minutes."
+
+          - alert: CollabDown
+            expr: absent(collab_websocket_connections_active) 
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service collab inaccessible"
+              description: "Aucune métrique reçue depuis les pods collab depuis 1 minute."
