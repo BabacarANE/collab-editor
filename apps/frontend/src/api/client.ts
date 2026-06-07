@@ -49,7 +49,7 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const res = await axios.post('http://localhost:3000/api/auth/refresh', { refreshToken })
+        const res = await api.post('/api/auth/refresh', { refreshToken })
         const { accessToken: newAccess, refreshToken: newRefresh } = res.data
         const { user } = useAuthStore.getState()
 
