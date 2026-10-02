@@ -53,6 +53,16 @@ jobs:
       - name: Type check Frontend
         run: pnpm --filter frontend exec tsc -b
 
+      - name: Lint Frontend
+        run: pnpm --filter frontend lint
+
+      # Tests unitaires sans base de données ni broker
+      - name: Unit tests
+        run: |
+          pnpm --filter @collab/api test:unit
+          pnpm --filter @collab/collab test:unit
+          pnpm --filter @collab/persistence test
+
   # ─── Job 1b : Tests d'intégration API ─────────────────────────────────────
   test:
     name: API Tests
