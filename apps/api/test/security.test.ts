@@ -208,3 +208,25 @@ describe('XSS et export', () => {
     assert.equal(res.statusCode, 403)
   })
 })
+
+describe('recherche', () => {
+  test('trouve un document par préfixe du titre et du contenu, sans fuite', async () => {
+    const doc = await app.inject({ method: 'POST', url: '/api/documents', headers: as(owner), payload: { title: 'Roadmap produit', workspaceId } })
+    const id = doc.json().id
+    await app.inject({ method: 'PATCH', url: `/api/documents/${id}/content`, headers: as(owner), payload: { content: '<p>Lancement de la plateforme collaborative</p>' } })
+
+    const byTitle = await app.inject({ method: 'GET', url: '/api/search?q=road', headers: as(owner) })
+    assert.ok(byTitle.json().some((r: { id: string }) => r.id === id))
+
+    const byContent = await app.inject({ method: 'GET', url: '/api/search?q=plateforme collab', headers: as(owner) })
+    assert.ok(byContent.json().some((r: { id: string }) => r.id === id))
+
+    const other = await app.inject({ method: 'GET', url: '/api/search?q=road', headers: as(stranger) })
+    assert.ok(!other.json().some((r: { id: string }) => r.id === id))
+  })
+
+  test('les opérateurs tsquery sont neutralisés', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/search?q=${encodeURIComponent("a' & !b | (c:*")}`, headers: as(owner) })
+    assert.equal(res.statusCode, 200)
+  })
+})
