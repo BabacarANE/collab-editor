@@ -151,6 +151,8 @@ Ajouter dans `C:\Windows\System32\drivers\etc\hosts` :
 ```bash
 # Namespace et RBAC
 kubectl apply -f k8s/namespace.yaml
+# Secrets : jamais commités — voir k8s/secrets.example.yaml
+cp k8s/secrets.example.yaml k8s/secrets.yaml  # puis remplacer les valeurs
 kubectl apply -f k8s/secrets.yaml
 kubectl apply -f k8s/configmap.yaml
 
@@ -316,18 +318,22 @@ collab-editor/
 
 | Variable | Description | Défaut |
 |----------|-------------|--------|
-| `DATABASE_URL` | URL PostgreSQL | `postgresql://collabuser:collabpass123@postgres:5432/collab` |
-| `JWT_SECRET` | Secret JWT | `dev_secret` |
+| `DATABASE_URL` | URL PostgreSQL (Secret K8s) | `postgresql://collabuser:<mot_de_passe>@postgres:5432/collab` |
+| `JWT_SECRET` | Secret JWT — **obligatoire en production (≥ 32 caractères)** | secret de dev |
 | `PORT` | Port HTTP | `3000` |
+| `CORS_ORIGINS` | Origines autorisées, séparées par des virgules | `http://localhost:5173,http://localhost:5174` |
+| `AUTH_RATE_LIMIT_MAX` | Requêtes/minute par IP sur `/api/auth/*` | `10` |
 
 ### Collab
 
 | Variable | Description | Défaut |
 |----------|-------------|--------|
-| `JWT_SECRET` | Secret JWT | `dev_secret` |
+| `JWT_SECRET` | Secret JWT (identique à l'API) — obligatoire en production | secret de dev |
 | `COLLAB_PORT` | Port WebSocket | `4000` |
 | `REDIS_URL` | URL Redis | `redis://redis:6379` |
-| `KAFKA_BROKER` | Broker Kafka | `kafka:29092` |
+| `KAFKA_BROKER` / `KAFKA_BROKERS` | Broker Kafka | `kafka:29092` |
+| `API_URL` | URL interne de l'API (vérification des droits par document) | `http://api:3000` |
+| `DOC_IDLE_TTL_MS` | Délai avant libération d'un document sans client | `30000` |
 
 ### Frontend
 
