@@ -2,14 +2,8 @@ import { FastifyInstance } from 'fastify'
 import mammoth from 'mammoth'
 import { marked } from 'marked'
 import prisma from '../lib/prisma'
+import { authenticate } from '../lib/auth'
 
-async function authenticate(request: any, reply: any) {
-  try {
-    await request.jwtVerify()
-  } catch {
-    return reply.status(401).send({ error: 'Non authentifié' })
-  }
-}
 
 export async function importRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: authenticate }, async (request, reply) => {

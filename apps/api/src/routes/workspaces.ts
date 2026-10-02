@@ -1,13 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
+import { authenticate } from '../lib/auth'
 
-async function authenticate(request: any, reply: any) {
-  try {
-    await request.jwtVerify()
-  } catch {
-    return reply.status(401).send({ error: 'Non authentifié' })
-  }
-}
 
 export async function workspaceRoutes(app: FastifyInstance) {
 
@@ -197,7 +191,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     })
 
     // On renvoie juste les workspaces, pas les memberships
-    const workspaces = memberships.map((m: { role: string; workspace: { id: string; name: string; createdAt: Date; updatedAt: Date } }) => ({
+    const workspaces = memberships.map(m => ({
       ...m.workspace,
       role: m.role
     }))

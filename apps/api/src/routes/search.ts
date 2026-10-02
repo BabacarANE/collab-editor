@@ -1,13 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
+import { authenticate } from '../lib/auth'
 
-async function authenticate(request: any, reply: any) {
-  try {
-    await request.jwtVerify()
-  } catch {
-    return reply.status(401).send({ error: 'Non authentifié' })
-  }
-}
 
 export async function searchRoutes(app: FastifyInstance) {
 

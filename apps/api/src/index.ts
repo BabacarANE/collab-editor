@@ -3,6 +3,8 @@ import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 import multipart from '@fastify/multipart'
+import rateLimit from '@fastify/rate-limit'
+import { config } from './lib/config'
 import { authRoutes } from './routes/auth'
 import { documentRoutes } from './routes/documents'
 import { workspaceRoutes } from './routes/workspaces'
@@ -14,11 +16,26 @@ import { permissionRoutes } from './routes/permissions'
 const app = Fastify({ logger: true })
 
 app.register(cors, {
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  origin: config.corsOrigins,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']
 })
 app.register(helmet)
-app.register(jwt, { secret: process.env.JWT_SECRET ?? 'dev_secret' })
+app.register(jwt, { secret: config.jwtSecret })
+
+// Rate limiting — activé route par route (auth notamment)
+app.register(rateLimit, { global: false })
+
+// Ne jamais exposer le détail des erreurs internes au client
+app.setErrorHandler((error: any, request, reply) => {
+  if (error.code === 'P2025') {
+    return reply.status(404).send({ error: 'Ressource non trouvée' })
+  }
+  const status = error.statusCode && error.statusCode < 500 ? error.statusCode : 500
+  if (status >= 500) request.log.error(error)
+  return reply.status(status).send({
+    error: status >= 500 ? 'Erreur interne' : error.message
+  })
+})
 
 // Multipart pour l'upload de fichiers (import)
 // Limite à 10 Mo par fichier
@@ -37,8 +54,7 @@ app.register(permissionRoutes, { prefix: '/api/documents' })
 
 const start = async () => {
   try {
-    const port = Number(process.env.PORT) || 3000
-    await app.listen({ port, host: '0.0.0.0' })
+    await app.listen({ port: config.port, host: '0.0.0.0' })
   } catch (err) {
     app.log.error(err)
     process.exit(1)
