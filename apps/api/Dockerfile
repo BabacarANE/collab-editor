@@ -26,7 +26,10 @@ COPY apps/persistence/package.json ./apps/persistence/
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
+# Version de pnpm figée (identique à la CI) : sans version, l'image prenait
+# la dernière majeure, qui refuse l'installation quand des scripts de build
+# (prisma, bcrypt…) ne sont pas explicitement approuvés (ERR_PNPM_IGNORED_BUILDS)
+RUN npm install -g pnpm@9.15.9 && pnpm install --frozen-lockfile
 
 # Copier le code source
 COPY apps/api/ ./apps/api/
