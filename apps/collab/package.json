@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test:e2e": "tsx --test test/*.e2e.test.ts"
+    "test:e2e": "tsx --test test/*.e2e.test.ts",
+    "test:unit": "tsx --test test/unit.test.ts"
   },
   "main": "index.js",
   "keywords": [],
