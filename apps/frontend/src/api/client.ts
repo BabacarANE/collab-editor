@@ -1,9 +1,13 @@
-import axios from 'axios'
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-})
+const baseURL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+
+export const api = axios.create({ baseURL })
+
+// Instance sans intercepteur dédiée au refresh : un 401 sur /refresh ne
+// doit jamais redéclencher un refresh (blocage infini sinon)
+const authClient = axios.create({ baseURL })
 
 // Injecter l'access token sur chaque requête
 api.interceptors.request.use((config) => {
@@ -12,61 +16,61 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Intercepteur de réponse — refresh automatique si 401
-let isRefreshing = false
-let failedQueue: { resolve: (token: string) => void; reject: (err: any) => void }[] = []
+// Un seul refresh à la fois : les appels concurrents partagent la même promesse
+let refreshPromise: Promise<string> | null = null
 
-const processQueue = (error: any, token: string | null) => {
-  failedQueue.forEach(p => error ? p.reject(error) : p.resolve(token!))
-  failedQueue = []
+export function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = (async () => {
+    const { refreshToken, user, setAuth, logout } = useAuthStore.getState()
+    if (!refreshToken || !user) {
+      logout()
+      throw new Error('Session expirée')
+    }
+    try {
+      const res = await authClient.post('/api/auth/refresh', { refreshToken })
+      const { accessToken, refreshToken: newRefresh } = res.data
+      setAuth(user, accessToken, newRefresh)
+      return accessToken as string
+    } catch (err) {
+      logout()
+      throw err
+    }
+  })().finally(() => { refreshPromise = null })
+
+  return refreshPromise
 }
 
+function tokenExpiresAt(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : 0
+  } catch {
+    return 0
+  }
+}
+
+// Access token valide au moins 30 s (utilisé pour la connexion WebSocket)
+export async function getFreshAccessToken(): Promise<string> {
+  const token = useAuthStore.getState().accessToken
+  if (token && tokenExpiresAt(token) - Date.now() > 30_000) return token
+  return refreshAccessToken()
+}
+
+// Refresh automatique sur 401, une seule tentative par requête
 api.interceptors.response.use(
   res => res,
-  async error => {
-    const originalRequest = error.config
+  async (error: AxiosError) => {
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
 
-    // Si 401 et pas déjà en train de retry
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      const { refreshToken, setAuth, logout } = useAuthStore.getState()
-
-      if (!refreshToken) {
-        logout()
-        return Promise.reject(error)
-      }
-
-      if (isRefreshing) {
-        // File d'attente pendant le refresh
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then(token => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return api(originalRequest)
-        }).catch(err => Promise.reject(err))
-      }
-
-      originalRequest._retry = true
-      isRefreshing = true
-
-      try {
-        const res = await api.post('/api/auth/refresh', { refreshToken })
-        const { accessToken: newAccess, refreshToken: newRefresh } = res.data
-        const { user } = useAuthStore.getState()
-
-        setAuth(user!, newAccess, newRefresh)
-        processQueue(null, newAccess)
-
-        originalRequest.headers.Authorization = `Bearer ${newAccess}`
-        return api(originalRequest)
-      } catch (err) {
-        processQueue(err, null)
-        logout()
-        return Promise.reject(err)
-      } finally {
-        isRefreshing = false
-      }
+    if (error.response?.status !== 401 || !originalRequest || originalRequest._retry) {
+      return Promise.reject(error)
     }
 
-    return Promise.reject(error)
+    originalRequest._retry = true
+    const token = await refreshAccessToken()
+    originalRequest.headers.Authorization = `Bearer ${token}`
+    return api(originalRequest)
   }
 )

@@ -38,6 +38,8 @@ Collab Editor permet à plusieurs utilisateurs d'éditer simultanément le même
 - Gestion des permissions par document (owner / editor / commenter / viewer)
 - Mode hors-ligne avec resynchronisation automatique
 - PWA installable
+- Interface inspirée de Notion (barre latérale, menu « / », recherche Ctrl+K) et de Google Docs (page, barre de mise en forme, partage, curseurs nommés)
+- Sécurité : droits vérifiés à chaque connexion WebSocket, HTML nettoyé côté serveur, export PDF sans accès réseau, rate limiting
 
 ---
 
@@ -151,6 +153,8 @@ Ajouter dans `C:\Windows\System32\drivers\etc\hosts` :
 ```bash
 # Namespace et RBAC
 kubectl apply -f k8s/namespace.yaml
+# Secrets : jamais commités — voir k8s/secrets.example.yaml
+cp k8s/secrets.example.yaml k8s/secrets.yaml  # puis remplacer les valeurs
 kubectl apply -f k8s/secrets.yaml
 kubectl apply -f k8s/configmap.yaml
 
@@ -246,8 +250,10 @@ kubectl port-forward -n monitoring service/alertmanager 9093:9093
 
 | Métrique | Type | Description |
 |----------|------|-------------|
-| `collab_websocket_connections_active` | Gauge | Connexions WebSocket actives par document |
+| `collab_websocket_connections_active` | Gauge | Connexions WebSocket actives (sans label docId : cardinalité maîtrisée) |
+| `collab_documents_loaded` | Gauge | Documents chargés en mémoire sur l'instance |
 | `collab_operations_total` | Counter | Opérations Yjs reçues depuis le démarrage |
+| `collab_rejected_writes_total` | Counter | Écritures refusées (VIEWER / COMMENTER) |
 | `collab_operation_duration_seconds` | Histogram | Durée de traitement des opérations (p95) |
 
 ---
@@ -281,9 +287,20 @@ k6 run k6/test-websocket.js
 
 Pipeline GitHub Actions déclenché sur push/PR vers `main` :
 
-1. **Lint & Type Check** — `tsc --noEmit` sur API + Frontend
-2. **Build & Push Docker** — images publiées sur GHCR
-3. **Security Scan** — Trivy (CRITICAL + HIGH)
+1. **Lint & Type Check** — génération des clients Prisma, `tsc` sur les 4 services, ESLint frontend, tests unitaires (sans base)
+2. **API Tests** — tests d'intégration (sécurité, contrôle d'accès, recherche) contre un PostgreSQL de service
+3. **Build & Push Docker** — images publiées sur GHCR
+4. **Security Scan** — Trivy (CRITICAL + HIGH)
+
+### Lancer les tests en local
+
+```bash
+pnpm --filter @collab/api test           # intégration + unitaires (DATABASE_URL migrée requise)
+pnpm --filter @collab/api test:unit      # unitaires seuls, sans base
+pnpm --filter @collab/collab test:unit
+pnpm --filter @collab/persistence test
+pnpm --filter @collab/collab test:e2e    # API + Redis + 2 instances collab (ports 4000/4001) démarrés
+```
 
 ### Images Docker
 ghcr.io/babacarane/collab-editor/api:latest
@@ -297,7 +314,7 @@ ghcr.io/babacarane/collab-editor/frontend:latest
 collab-editor/
 ├── apps/
 │   ├── frontend/        React + Vite + Tiptap + Yjs + Tailwind
-│   ├── api/             Fastify REST + Prisma
+│   ├── api/             Fastify REST + Prisma (architecture en couches)
 │   ├── collab/          WebSocket Yjs + Redis Pub/Sub + Kafka
 │   └── persistence/     Consumer Kafka → OperationLog
 ├── packages/
@@ -308,6 +325,28 @@ collab-editor/
 ├── docker-compose.yml
 └── .github/workflows/   CI/CD GitHub Actions
 
+### Architecture du code (principes SOLID)
+
+**API** (`apps/api/src`) — les dépendances vont toujours vers l'intérieur :
+
+```
+http/routes  ──►  services  ──►  repositories  ──►  Prisma
+   (minces)        │  (règles métier)
+                   ├──► domain/  (erreurs, politique des rôles, validations — pur)
+                   └──► ports    (TokenService, PasswordHasher, PdfRenderer)
+                                   ▲ implémentés dans infrastructure/
+container.ts : racine de composition (seul endroit qui instancie les classes concrètes)
+```
+
+- **S** — une classe par responsabilité (`AccessService` est le point unique de décision d'accès).
+- **O** — import/export en stratégies : ajouter un format = ajouter un `DocumentConverter` / `DocumentExporter`.
+- **L/I** — chaque plugin de routes ne reçoit que les services dont il a besoin.
+- **D** — les services dépendent d'interfaces ; `buildApp({ prisma, hasher, pdfRenderer })` permet d'injecter des doublures (voir `test/unit`).
+
+**Collab** (`apps/collab/src`) — `server.ts` (HTTP + upgrade authentifié), `auth/` (token, `PermissionChecker`), `protocol.ts` (filtrage lecture seule), `sync/DocumentRegistry` (cycle de vie des documents) qui diffuse vers des `UpdateSink` (`RedisUpdateBus`, `KafkaOperationLog`).
+
+**Frontend** (`apps/frontend/src`) — `api/endpoints.ts` (seul module qui connaît les URL), `hooks/` (collaboration, document, titre, sauvegarde, commentaires, versions), `components/` (ui, layout, editor, dialogs), `store/` (zustand).
+
 ---
 
 ## Variables d'environnement
@@ -316,18 +355,22 @@ collab-editor/
 
 | Variable | Description | Défaut |
 |----------|-------------|--------|
-| `DATABASE_URL` | URL PostgreSQL | `postgresql://collabuser:collabpass123@postgres:5432/collab` |
-| `JWT_SECRET` | Secret JWT | `dev_secret` |
+| `DATABASE_URL` | URL PostgreSQL (Secret K8s) | `postgresql://collabuser:<mot_de_passe>@postgres:5432/collab` |
+| `JWT_SECRET` | Secret JWT — **obligatoire en production (≥ 32 caractères)** | secret de dev |
 | `PORT` | Port HTTP | `3000` |
+| `CORS_ORIGINS` | Origines autorisées, séparées par des virgules | `http://localhost:5173,http://localhost:5174` |
+| `AUTH_RATE_LIMIT_MAX` | Requêtes/minute par IP sur `/api/auth/*` | `10` |
 
 ### Collab
 
 | Variable | Description | Défaut |
 |----------|-------------|--------|
-| `JWT_SECRET` | Secret JWT | `dev_secret` |
+| `JWT_SECRET` | Secret JWT (identique à l'API) — obligatoire en production | secret de dev |
 | `COLLAB_PORT` | Port WebSocket | `4000` |
 | `REDIS_URL` | URL Redis | `redis://redis:6379` |
-| `KAFKA_BROKER` | Broker Kafka | `kafka:29092` |
+| `KAFKA_BROKER` / `KAFKA_BROKERS` | Broker Kafka | `kafka:29092` |
+| `API_URL` | URL interne de l'API (vérification des droits par document) | `http://api:3000` |
+| `DOC_IDLE_TTL_MS` | Délai avant libération d'un document sans client | `30000` |
 
 ### Frontend
 

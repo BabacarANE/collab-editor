@@ -16,20 +16,29 @@ export const options = {
 
 const BASE_URL  = 'http://collab.local:8080'
 const WS_URL    = 'ws://collab.local:8080/ws'
-const DOC_ID    = 'k6-load-test-doc'
 
+// Le serveur collab vérifie les droits sur le document : on crée un
+// workspace et un document dont l'utilisateur de test est propriétaire
 export function setup() {
+  const json = { 'Content-Type': 'application/json' }
   const res = http.post(`${BASE_URL}/api/auth/register`, JSON.stringify({
     email: `k6-ws-${Date.now()}@test.com`,
     password: 'password123'
-  }), { headers: { 'Content-Type': 'application/json' } })
-
+  }), { headers: json })
   check(res, { 'auth ok': r => r.status === 201 })
-  return { token: res.json('accessToken') }
+
+  const token = res.json('accessToken')
+  const headers = { ...json, Authorization: `Bearer ${token}` }
+  const workspaceId = http.post(`${BASE_URL}/api/workspaces`, JSON.stringify({ name: 'k6-ws' }), { headers }).json('id')
+  const docId = http.post(`${BASE_URL}/api/documents`, JSON.stringify({ title: 'k6-ws-doc', workspaceId }), { headers }).json('id')
+  check(docId, { 'document créé': id => !!id })
+
+  // Access token valide 15 min : suffisant pour ce scénario de 1 min 40
+  return { token, docId }
 }
 
 export default function (data) {
-  const url = `${WS_URL}/${DOC_ID}?token=${data.token}`
+  const url = `${WS_URL}/${data.docId}?token=${data.token}`
 
   const res = ws.connect(url, {}, function (socket) {
     socket.on('open', () => {

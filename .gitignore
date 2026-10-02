@@ -5,3 +5,4 @@ dist/
 .DS_Store
 .idea
 .pnpm-store/
+k8s/secrets.yaml
