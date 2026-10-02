@@ -108,6 +108,7 @@ services:
         COLLAB_PORT: 4000
         REDIS_URL: redis://redis:6379
         KAFKA_BROKER: kafka:29092
+        API_URL: http://api:3000
       depends_on:
         api:
           condition: service_started
