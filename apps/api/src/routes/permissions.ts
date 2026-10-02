@@ -37,8 +37,6 @@ export async function permissionRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { email, role } = request.body as { email: string; role: string }
 
-    console.log('body reçu:', { email, role })
-
     const validRoles = ['EDITOR', 'COMMENTER', 'VIEWER']
     if (!email || !validRoles.includes(role)) {
       return reply.status(400).send({ error: 'email et role (EDITOR/COMMENTER/VIEWER) requis' })
@@ -92,10 +90,13 @@ export async function permissionRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Accès refusé — owner uniquement' })
     }
 
-    await prisma.permission.update({
-      where: { documentId_userId: { documentId: id, userId: targetUserId } },
+    const { count } = await prisma.permission.updateMany({
+      where: { documentId: id, userId: targetUserId },
       data: { role: role as any }
     })
+    if (count === 0) {
+      return reply.status(404).send({ error: 'Permission non trouvée' })
+    }
 
     return reply.status(204).send()
   })

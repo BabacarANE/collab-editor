@@ -1,6 +1,10 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
 import { authenticate } from '../lib/auth'
+import { canAccessDocument, getDocumentRole, isWorkspaceMember, roleAllows } from '../lib/access'
+
+const MAX_TITLE_LENGTH = 255
+const MAX_COMMENT_LENGTH = 5000
 
 
 export async function documentRoutes(app: FastifyInstance) {
@@ -13,10 +17,18 @@ export async function documentRoutes(app: FastifyInstance) {
     if (!workspaceId) {
       return reply.status(400).send({ error: 'workspaceId requis' })
     }
+    if (title !== undefined && (typeof title !== 'string' || title.length > MAX_TITLE_LENGTH)) {
+      return reply.status(400).send({ error: 'Titre invalide' })
+    }
+
+    // Seuls les membres du workspace peuvent y créer des documents
+    if (!(await isWorkspaceMember(userId, workspaceId))) {
+      return reply.status(403).send({ error: 'Accès refusé au workspace' })
+    }
 
     const document = await prisma.document.create({
       data: {
-        title: title ?? 'Sans titre',
+        title: title?.trim() || 'Sans titre',
         workspaceId,
         ownerId: userId
       },
@@ -99,6 +111,10 @@ export async function documentRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { title } = request.body as { title?: string }
 
+    if (typeof title !== 'string' || title.length > MAX_TITLE_LENGTH) {
+      return reply.status(400).send({ error: 'Titre invalide' })
+    }
+
     const document = await prisma.document.findFirst({
       where: {
         id,
@@ -116,7 +132,7 @@ export async function documentRoutes(app: FastifyInstance) {
 
     const updated = await prisma.document.update({
       where: { id },
-      data: { title },
+      data: { title: title.trim() || 'Sans titre' },
       select: {
         id: true,
         title: true,
@@ -301,16 +317,29 @@ export async function documentRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { content, parentId } = request.body as { content: string; parentId?: string }
 
-    if (!content?.trim()) {
+    if (typeof content !== 'string' || !content.trim()) {
       return reply.status(400).send({ error: 'Le contenu du commentaire est requis' })
     }
+    if (content.length > MAX_COMMENT_LENGTH) {
+      return reply.status(400).send({ error: 'Commentaire trop long' })
+    }
 
-    const document = await prisma.document.findFirst({
-      where: { id, deletedAt: null }
-    })
-
-    if (!document) {
+    const role = await getDocumentRole(userId, id)
+    if (!role) {
       return reply.status(404).send({ error: 'Document non trouvé' })
+    }
+    if (!roleAllows(role, 'comment')) {
+      return reply.status(403).send({ error: 'Vous ne pouvez pas commenter ce document' })
+    }
+
+    // Une réponse doit cibler un commentaire racine du même document
+    if (parentId !== undefined && parentId !== null) {
+      const parent = await prisma.comment.findFirst({
+        where: { id: parentId, documentId: id, parentId: null }
+      })
+      if (!parent) {
+        return reply.status(400).send({ error: 'Commentaire parent invalide' })
+      }
     }
 
     const comment = await prisma.comment.create({
@@ -335,7 +364,12 @@ export async function documentRoutes(app: FastifyInstance) {
 
   // GET /api/documents/:id/comments — Lister les commentaires
   app.get('/:id/comments', { preHandler: authenticate }, async (request, reply) => {
+    const { userId } = request.user as { userId: string }
     const { id } = request.params as { id: string }
+
+    if (!(await canAccessDocument(userId, id, 'read'))) {
+      return reply.status(404).send({ error: 'Document non trouvé' })
+    }
 
     const comments = await prisma.comment.findMany({
       where: { documentId: id, parentId: null },
@@ -364,13 +398,15 @@ export async function documentRoutes(app: FastifyInstance) {
   // PATCH /api/documents/:id/comments/:commentId/resolve — Résoudre un commentaire
   app.patch('/:id/comments/:commentId/resolve', { preHandler: authenticate }, async (request, reply) => {
     const { userId } = request.user as { userId: string }
-    const { commentId } = request.params as { id: string; commentId: string }
+    const { id, commentId } = request.params as { id: string; commentId: string }
 
-    const comment = await prisma.comment.findFirst({
-      where: { id: commentId, authorId: userId }
-    })
+    const role = await getDocumentRole(userId, id)
+    const comment = role
+      ? await prisma.comment.findFirst({ where: { id: commentId, documentId: id } })
+      : null
 
-    if (!comment) {
+    // L'auteur ou un éditeur/owner du document peut résoudre
+    if (!comment || (comment.authorId !== userId && !roleAllows(role, 'edit'))) {
       return reply.status(404).send({ error: 'Commentaire non trouvé ou accès refusé' })
     }
 
@@ -385,17 +421,23 @@ export async function documentRoutes(app: FastifyInstance) {
   // DELETE /api/documents/:id/comments/:commentId — Supprimer un commentaire
   app.delete('/:id/comments/:commentId', { preHandler: authenticate }, async (request, reply) => {
     const { userId } = request.user as { userId: string }
-    const { commentId } = request.params as { id: string; commentId: string }
+    const { id, commentId } = request.params as { id: string; commentId: string }
 
-    const comment = await prisma.comment.findFirst({
-      where: { id: commentId, authorId: userId }
-    })
+    const role = await getDocumentRole(userId, id)
+    const comment = role
+      ? await prisma.comment.findFirst({ where: { id: commentId, documentId: id } })
+      : null
 
-    if (!comment) {
+    // L'auteur ou l'owner du document peut supprimer
+    if (!comment || (comment.authorId !== userId && !roleAllows(role, 'manage'))) {
       return reply.status(404).send({ error: 'Commentaire non trouvé ou accès refusé' })
     }
 
-    await prisma.comment.delete({ where: { id: commentId } })
+    // Les réponses sont supprimées avec le commentaire racine
+    await prisma.$transaction([
+      prisma.comment.deleteMany({ where: { parentId: commentId } }),
+      prisma.comment.delete({ where: { id: commentId } })
+    ])
 
     return reply.status(204).send()
   })

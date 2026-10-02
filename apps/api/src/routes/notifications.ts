@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
 import { authenticate } from '../lib/auth'
+import { canAccessDocument } from '../lib/access'
 
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -47,10 +48,18 @@ export async function notificationRoutes(app: FastifyInstance) {
   // Appelé par l'éditeur au moment du save
   app.post('/mention', { preHandler: authenticate }, async (request, reply) => {
     const { userId } = request.user as { userId: string }
-    const { mentionedUserId, documentId, documentTitle } = request.body as {
+    const { mentionedUserId, documentId } = request.body as {
       mentionedUserId: string
       documentId: string
-      documentTitle: string
+    }
+
+    if (typeof mentionedUserId !== 'string' || typeof documentId !== 'string') {
+      return reply.status(400).send({ error: 'mentionedUserId et documentId requis' })
+    }
+
+    // L'auteur de la mention doit pouvoir éditer ou commenter le document
+    if (!(await canAccessDocument(userId, documentId, 'comment'))) {
+      return reply.status(403).send({ error: 'Accès refusé' })
     }
 
     // Ne pas notifier si on se mentionne soi-même
@@ -58,11 +67,18 @@ export async function notificationRoutes(app: FastifyInstance) {
       return reply.status(204).send()
     }
 
-    // Vérifier que l'utilisateur mentionné existe
-    const mentionedUser = await prisma.user.findUnique({ where: { id: mentionedUserId } })
-    if (!mentionedUser) {
-      return reply.status(404).send({ error: 'Utilisateur non trouvé' })
+    // L'utilisateur mentionné doit avoir accès au document — sinon on lui
+    // révélerait le titre d'un document qu'il ne peut pas voir
+    if (!(await canAccessDocument(mentionedUserId, documentId, 'read'))) {
+      return reply.status(204).send()
     }
+
+    // Titre lu en base : jamais celui fourni par le client
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { title: true }
+    })
+    const documentTitle = document?.title ?? 'Document'
 
     const mentioner = await prisma.user.findUnique({ where: { id: userId } })
 

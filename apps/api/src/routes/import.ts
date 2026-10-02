@@ -3,6 +3,7 @@ import mammoth from 'mammoth'
 import { marked } from 'marked'
 import prisma from '../lib/prisma'
 import { authenticate } from '../lib/auth'
+import { isWorkspaceMember } from '../lib/access'
 
 
 export async function importRoutes(app: FastifyInstance) {
@@ -28,15 +29,16 @@ export async function importRoutes(app: FastifyInstance) {
       }
     }
 
-    console.log('filename:', filename)
-    console.log('workspaceId:', workspaceId)
-
     if (!fileBuffer) {
       return reply.status(400).send({ error: 'Fichier requis' })
     }
 
     if (!workspaceId) {
       return reply.status(400).send({ error: 'workspaceId requis' })
+    }
+
+    if (!(await isWorkspaceMember(userId, workspaceId))) {
+      return reply.status(403).send({ error: 'Accès refusé au workspace' })
     }
 
     const ext = filename.split('.').pop()?.toLowerCase()
