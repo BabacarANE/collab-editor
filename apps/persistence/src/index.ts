@@ -50,8 +50,10 @@ async function start() {
           console.log(`[persistence] ${operations.length} opérations persistées`)
         } catch (err) {
           console.error('[persistence] Erreur PostgreSQL:', err)
-          // Ne pas résoudre l'offset — Kafka va retry
-          return
+          // Lever l'erreur : avec eachBatchAutoResolve, un simple return
+          // validerait les offsets et les opérations seraient perdues.
+          // kafkajs relira le batch.
+          throw err
         }
       }
 
