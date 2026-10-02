@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { UserMinus } from 'lucide-react'
-import { api } from '../../api/client'
+import { workspacesApi } from '../../api/endpoints'
 import { apiError } from '../../lib/format'
 import { useAuthStore } from '../../store/authStore'
 import type { Workspace, WorkspaceMember, WorkspaceRole } from '../../types'
@@ -22,8 +22,8 @@ export default function MembersDialog({ workspace, onClose }: Props) {
   const isAdmin = workspace.role === 'ADMIN'
 
   useEffect(() => {
-    api.get(`/api/workspaces/${workspace.id}`)
-      .then(res => setMembers(res.data.members))
+    workspacesApi.members(workspace.id)
+      .then(setMembers)
       .catch(() => setError('Impossible de charger les membres'))
   }, [workspace.id])
 
@@ -32,8 +32,8 @@ export default function MembersDialog({ workspace, onClose }: Props) {
     if (!email.trim()) return
     setError('')
     try {
-      const res = await api.post(`/api/workspaces/${workspace.id}/members`, { email: email.trim(), role })
-      setMembers(prev => [...prev, res.data])
+      const member = await workspacesApi.invite(workspace.id, email.trim(), role)
+      setMembers(prev => [...prev, member])
       setEmail('')
     } catch (err) {
       setError(apiError(err, 'Invitation impossible'))
@@ -43,7 +43,7 @@ export default function MembersDialog({ workspace, onClose }: Props) {
   const remove = async (userId: string) => {
     setError('')
     try {
-      await api.delete(`/api/workspaces/${workspace.id}/members/${userId}`)
+      await workspacesApi.removeMember(workspace.id, userId)
       setMembers(prev => prev.filter(m => m.user.id !== userId))
     } catch (err) {
       setError(apiError(err, 'Suppression impossible'))

@@ -1,5 +1,4 @@
-import { api } from '../api/client'
-import type { WorkspaceMember } from '../types'
+import { workspacesApi } from '../api/endpoints'
 
 export interface MemberOption {
   id: string
@@ -15,8 +14,8 @@ export function createMemberSearch(getWorkspaceId: () => string | null) {
     if (!workspaceId) return []
     if (!cache.has(workspaceId)) {
       try {
-        const res = await api.get<{ members: WorkspaceMember[] }>(`/api/workspaces/${workspaceId}`)
-        cache.set(workspaceId, res.data.members.map(m => ({ id: m.user.id, label: m.user.email })))
+        const members = await workspacesApi.members(workspaceId)
+        cache.set(workspaceId, members.map(m => ({ id: m.user.id, label: m.user.email })))
       } catch {
         return []
       }

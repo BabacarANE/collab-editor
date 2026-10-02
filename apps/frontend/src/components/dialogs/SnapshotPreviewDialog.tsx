@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { api } from '../../api/client'
+import { snapshotsApi } from '../../api/endpoints'
 import { relativeTime } from '../../lib/format'
 import { sanitizeHtml } from '../../lib/sanitize'
 import type { Snapshot } from '../../types'
@@ -19,8 +19,8 @@ export default function SnapshotPreviewDialog({ docId, snapshot, canRestore, onR
   const [content, setContent] = useState<string | null>(null)
 
   useEffect(() => {
-    api.get<Snapshot>(`/api/documents/${docId}/snapshots/${snapshot.id}`)
-      .then(res => setContent(res.data.content ?? ''))
+    snapshotsApi.get(docId, snapshot.id)
+      .then(s => setContent(s.content ?? ''))
       .catch(() => setContent(''))
   }, [docId, snapshot.id])
 

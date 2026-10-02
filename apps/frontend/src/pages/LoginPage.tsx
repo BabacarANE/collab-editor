@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FileText } from 'lucide-react'
-import { api } from '../api/client'
+import { authApi } from '../api/endpoints'
 import { apiError } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
 import { Button } from '../components/ui/Button'
@@ -25,9 +25,8 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
-      const res = await api.post(endpoint, { email, password })
-      setAuth(res.data.user, res.data.accessToken, res.data.refreshToken)
+      const session = await (isRegister ? authApi.register : authApi.login)(email, password)
+      setAuth(session.user, session.accessToken, session.refreshToken)
     } catch (err) {
       setError(apiError(err, 'Connexion impossible'))
     } finally {

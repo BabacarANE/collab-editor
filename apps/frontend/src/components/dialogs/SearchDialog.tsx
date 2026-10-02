@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { FileText, Search } from 'lucide-react'
-import { api } from '../../api/client'
+import { searchApi } from '../../api/endpoints'
 import { relativeTime } from '../../lib/format'
 import { sanitizeExcerpt } from '../../lib/sanitize'
 import { useWorkspaceStore } from '../../store/workspaceStore'
@@ -39,10 +39,7 @@ export default function SearchDialog({ onClose, onOpenDocument }: Props) {
     const timer = setTimeout(async () => {
       setLoading(true)
       try {
-        const params = new URLSearchParams({ q })
-        if (workspaceId) params.set('workspaceId', workspaceId)
-        const res = await api.get<SearchResult[]>(`/api/search?${params}`)
-        setResults(res.data)
+        setResults(await searchApi.documents(q, workspaceId))
       } catch {
         setResults([])
       } finally {

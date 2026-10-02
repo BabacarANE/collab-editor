@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AtSign, Bell } from 'lucide-react'
-import { api } from '../../api/client'
+import { notificationsApi } from '../../api/endpoints'
 import { relativeTime } from '../../lib/format'
 import type { AppNotification } from '../../types'
 import { IconButton } from '../ui/Button'
@@ -18,8 +18,8 @@ export default function NotificationBell({ onOpenDocument }: Props) {
 
   useEffect(() => {
     const load = () =>
-      api.get<AppNotification[]>('/api/notifications')
-        .then(res => setNotifications(res.data))
+      notificationsApi.list()
+        .then(setNotifications)
         .catch(() => { /* silencieux : nouvel essai au prochain intervalle */ })
     load()
     const interval = setInterval(load, POLL_INTERVAL_MS)
@@ -27,13 +27,13 @@ export default function NotificationBell({ onOpenDocument }: Props) {
   }, [])
 
   const markAllRead = async () => {
-    await api.patch('/api/notifications/read-all')
+    await notificationsApi.markAllRead()
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
   }
 
   const open = async (n: AppNotification, close: () => void) => {
     if (!n.read) {
-      api.patch(`/api/notifications/${n.id}/read`).catch(() => {})
+      notificationsApi.markRead(n.id).catch(() => {})
       setNotifications(prev => prev.map(x => (x.id === n.id ? { ...x, read: true } : x)))
     }
     if (n.payload.documentId) {

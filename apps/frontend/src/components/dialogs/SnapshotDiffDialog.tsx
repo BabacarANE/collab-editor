@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import DiffMatchPatch from 'diff-match-patch'
 import { ArrowRight } from 'lucide-react'
-import { api } from '../../api/client'
+import { snapshotsApi } from '../../api/endpoints'
 import { relativeTime } from '../../lib/format'
 import type { Snapshot } from '../../types'
 import { Modal } from '../ui/Modal'
@@ -41,9 +41,9 @@ export default function SnapshotDiffDialog({ docId, snapshots, onClose }: Props)
     let cancelled = false
     setError('')
     // Contenus chargés à la demande, uniquement pour les deux versions choisies
-    Promise.all([leftId, rightId].map(id => api.get<Snapshot>(`/api/documents/${docId}/snapshots/${id}`)))
+    Promise.all([leftId, rightId].map(id => snapshotsApi.get(docId, id)))
       .then(([left, right]) => {
-        if (!cancelled) setDiff(computeDiff(htmlToText(left.data.content ?? ''), htmlToText(right.data.content ?? '')))
+        if (!cancelled) setDiff(computeDiff(htmlToText(left.content ?? ''), htmlToText(right.content ?? '')))
       })
       .catch(() => !cancelled && setError('Impossible de charger les versions'))
     return () => { cancelled = true }

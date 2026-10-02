@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api } from '../api/client'
+import { documentsApi, workspacesApi } from '../api/endpoints'
 import { safeStorage } from '../lib/format'
 import type { DocumentSummary, Workspace } from '../types'
 
@@ -32,8 +32,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   error: null,
 
   loadWorkspaces: async () => {
-    const res = await api.get<Workspace[]>('/api/workspaces')
-    const workspaces = res.data
+    const workspaces = await workspacesApi.list()
     const remembered = storage.get(ACTIVE_KEY)
     const current = get().activeWorkspaceId
     const active =
@@ -53,8 +52,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   },
 
   createWorkspace: async (name) => {
-    const res = await api.post('/api/workspaces', { name })
-    const workspace: Workspace = { ...res.data, role: 'ADMIN' }
+    const workspace: Workspace = { ...(await workspacesApi.create(name)), role: 'ADMIN' }
     set(state => ({ workspaces: [...state.workspaces, workspace] }))
     await get().selectWorkspace(workspace.id)
     return workspace
@@ -65,9 +63,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     if (!workspaceId) return
     set({ loadingDocuments: true, error: null })
     try {
-      const res = await api.get<DocumentSummary[]>(`/api/documents/workspace/${workspaceId}`)
+      const documents = await documentsApi.listInWorkspace(workspaceId)
       // Ignorer une réponse arrivée après un changement de workspace
-      if (get().activeWorkspaceId === workspaceId) set({ documents: res.data })
+      if (get().activeWorkspaceId === workspaceId) set({ documents })
     } catch {
       set({ error: 'Impossible de charger les documents' })
     } finally {
@@ -78,9 +76,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   createDocument: async (title) => {
     const workspaceId = get().activeWorkspaceId
     if (!workspaceId) throw new Error('Aucun workspace actif')
-    const res = await api.post<DocumentSummary>('/api/documents', { title: title || 'Sans titre', workspaceId })
-    get().addDocument(res.data)
-    return res.data
+    const doc = await documentsApi.create(workspaceId, title || 'Sans titre')
+    get().addDocument(doc)
+    return doc
   },
 
   addDocument: (doc) => {
@@ -93,7 +91,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   },
 
   deleteDocument: async (id) => {
-    await api.delete(`/api/documents/${id}`)
+    await documentsApi.remove(id)
     set(state => ({ documents: state.documents.filter(d => d.id !== id) }))
   },
 

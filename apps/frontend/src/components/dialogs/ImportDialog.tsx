@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
-import { api } from '../../api/client'
+import { documentsApi } from '../../api/endpoints'
 import { apiError } from '../../lib/format'
 import type { DocumentSummary } from '../../types'
 import { Modal } from '../ui/Modal'
@@ -21,11 +21,7 @@ export default function ImportDialog({ workspaceId, onClose, onImported }: Props
     setError('')
     setLoading(true)
     try {
-      const form = new FormData()
-      form.append('workspaceId', workspaceId)
-      form.append('file', file)
-      const res = await api.post<DocumentSummary>('/api/import', form)
-      onImported(res.data)
+      onImported(await documentsApi.import(workspaceId, file))
       onClose()
     } catch (err) {
       setError(apiError(err, 'Import impossible'))

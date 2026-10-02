@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Link2, Lock } from 'lucide-react'
-import { api } from '../../api/client'
+import { permissionsApi, workspacesApi } from '../../api/endpoints'
 import { apiError } from '../../lib/format'
 import { documentUrl } from '../../lib/router'
 import { useAuthStore } from '../../store/authStore'
@@ -35,11 +35,11 @@ export default function ShareDialog({ docId, docTitle, workspaceId, onClose }: P
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    api.get(`/api/documents/${docId}/permissions`)
-      .then(res => setPermissions(res.data))
+    permissionsApi.list(docId)
+      .then(setPermissions)
       .catch(err => setError(apiError(err, 'Impossible de charger les accès')))
-    api.get(`/api/workspaces/${workspaceId}`)
-      .then(res => setMembers(res.data.members))
+    workspacesApi.members(workspaceId)
+      .then(setMembers)
       .catch(() => { /* suggestions facultatives */ })
   }, [docId, workspaceId])
 
@@ -52,8 +52,8 @@ export default function ShareDialog({ docId, docTitle, workspaceId, onClose }: P
     if (!email.trim()) return
     setError('')
     try {
-      const res = await api.post<DocumentPermission>(`/api/documents/${docId}/permissions`, { email: email.trim(), role })
-      setPermissions(prev => [...prev.filter(p => p.user.id !== res.data.user.id), res.data])
+      const granted = await permissionsApi.grant(docId, email.trim(), role)
+      setPermissions(prev => [...prev.filter(p => p.user.id !== granted.user.id), granted])
       setEmail('')
     } catch (err) {
       setError(apiError(err, 'Partage impossible'))
@@ -64,10 +64,10 @@ export default function ShareDialog({ docId, docTitle, workspaceId, onClose }: P
     setError('')
     try {
       if (value === 'REMOVE') {
-        await api.delete(`/api/documents/${docId}/permissions/${userId}`)
+        await permissionsApi.revoke(docId, userId)
         setPermissions(prev => prev.filter(p => p.user.id !== userId))
       } else {
-        await api.patch(`/api/documents/${docId}/permissions/${userId}`, { role: value })
+        await permissionsApi.changeRole(docId, userId, value as DocumentRole)
         setPermissions(prev => prev.map(p => (p.user.id === userId ? { ...p, role: value as DocumentRole } : p)))
       }
     } catch (err) {
