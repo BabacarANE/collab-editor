@@ -18,6 +18,7 @@ export const config = {
     .split(',')
     .map(o => o.trim())
     .filter(Boolean),
+  authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX) || 10,
   accessTokenTtl: '15m',
   refreshTokenTtlMs: 7 * 24 * 60 * 60 * 1000
 }

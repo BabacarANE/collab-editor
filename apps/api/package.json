@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "NODE_ENV=test AUTH_RATE_LIMIT_MAX=1000 tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

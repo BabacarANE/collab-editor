@@ -10,7 +10,7 @@ const MIN_PASSWORD_LENGTH = 8
 const DUMMY_HASH = bcrypt.hashSync('timing-attack-protection', 12)
 
 // Limite anti brute-force sur les routes d'authentification
-const authRateLimit = { rateLimit: { max: 10, timeWindow: '1 minute' } }
+const authRateLimit = { rateLimit: { max: config.authRateLimitMax, timeWindow: '1 minute' } }
 
 export async function authRoutes(app: FastifyInstance) {
 
