@@ -1,448 +1,427 @@
-import { useEffect, useState, useRef } from 'react'
-import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Collaboration from '@tiptap/extension-collaboration'
-import Mention from '@tiptap/extension-mention'
-import * as Y from 'yjs'
-import { WebsocketProvider } from 'y-websocket'
-import tippy from 'tippy.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { EditorContent, useEditor, useEditorState, type EditorEvents } from '@tiptap/react'
+import { ySyncPluginKey } from '@tiptap/y-tiptap'
+import {
+  CloudOff, Download, FileText, History, Link2, Loader2, Menu as MenuIcon,
+  MessageSquare, MoreHorizontal, Trash2, Users
+} from 'lucide-react'
+import { api } from '../api/client'
+import { colorFor, relativeTime } from '../lib/format'
+import { documentUrl, navigate } from '../lib/router'
 import { useAuthStore } from '../store/authStore'
-import { api, getFreshAccessToken } from '../api/client'
-import { sanitizeHtml } from '../lib/sanitize'
-import EditorToolbar from '../components/EditorToolbar'
-import HistoryPanel from '../components/HistoryPanel'
-import CommentsPanel from '../components/CommentsPanel'
-import MentionList from '../components/MentionList'
-import SnapshotDiff from '../components/SnapshotDiff'
-import DocumentPermissions from '../components/DocumentPermissions'
-import NotificationBell from '../components/NotificationBell'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import { useCollaboration } from '../hooks/useCollaboration'
+import { createMemberSearch } from '../lib/memberSearch'
+import type { Comment, DocumentDetail, DocumentRole, Snapshot } from '../types'
+import { buildExtensions } from '../components/editor/extensions'
+import FormatToolbar from '../components/editor/FormatToolbar'
+import CommentsPanel from '../components/editor/CommentsPanel'
+import HistoryPanel from '../components/editor/HistoryPanel'
+import ShareDialog from '../components/dialogs/ShareDialog'
+import SnapshotDiffDialog from '../components/dialogs/SnapshotDiffDialog'
+import SnapshotPreviewDialog from '../components/dialogs/SnapshotPreviewDialog'
+import NotificationBell from '../components/layout/NotificationBell'
+import { Avatar } from '../components/ui/Avatar'
+import { Button, IconButton } from '../components/ui/Button'
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/ui/Menu'
 
 interface Props {
   docId: string
-  onBack: () => void
-  workspaceId: string
+  sidebarOpen: boolean
+  openSidebar: () => void
 }
 
-function userColor(userId: string): string {
-  const colors = ['#F98181', '#FBBC88', '#FAF594', '#70CFF8', '#94FADB', '#B9F18D', '#C3ABF8']
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) hash = userId.charCodeAt(i) + ((hash << 5) - hash)
-  return colors[Math.abs(hash) % colors.length]
+type Panel = 'comments' | 'history' | null
+type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
+
+const AUTOSAVE_DELAY_MS = 2000
+const TITLE_SAVE_DELAY_MS = 600
+
+const ROLE_BADGE: Partial<Record<DocumentRole, string>> = {
+  VIEWER: 'Lecture seule',
+  COMMENTER: 'Commentaires uniquement',
 }
 
-export default function EditorPage({ docId, onBack, workspaceId }: Props) {
-  const { user, logout } = useAuthStore()
-  const [docTitle, setDocTitle] = useState('Sans titre')
-  const [myRole, setMyRole] = useState('OWNER')
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
-  const [awarenessUsers, setAwarenessUsers] = useState<{ name: string; color: string }[]>([])
-  const [ydoc] = useState(() => new Y.Doc())
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editorRef = useRef<any>(null)
+export default function EditorPage({ docId, sidebarOpen, openSidebar }: Props) {
+  const user = useAuthStore(s => s.user)
+  const { ydoc, provider, status, synced, collaborators } = useCollaboration(docId)
 
-  // Panels
-  const [showHistory, setShowHistory] = useState(false)
-  const [showComments, setShowComments] = useState(false)
-  const [showPermissions, setShowPermissions] = useState(false)
-  const [showDiff, setShowDiff] = useState(false)
+  const [doc, setDoc] = useState<DocumentDetail | null>(null)
+  const [role, setRole] = useState<DocumentRole | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const [title, setTitle] = useState('')
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
+  const [panel, setPanel] = useState<Panel>(null)
+  const [dialog, setDialog] = useState<'share' | 'diff' | null>(null)
+  const [previewSnapshot, setPreviewSnapshot] = useState<Snapshot | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
 
-  // Snapshots
-  const [snapshots, setSnapshots] = useState<any[]>([])
-  const [snapshotName, setSnapshotName] = useState('')
-  const [previewSnapshot, setPreviewSnapshot] = useState<any>(null)
+  const canEdit = role === 'OWNER' || role === 'EDITOR'
+  const canComment = canEdit || role === 'COMMENTER'
+  const [searchMembers] = useState(() => createMemberSearch(() => useWorkspaceStore.getState().activeWorkspaceId))
+  const notifiedMentionsRef = useRef<Set<string> | null>(null)
 
-  // Comments
-  const [comments, setComments] = useState<any[]>([])
-  const [newComment, setNewComment] = useState('')
-  const [replyTo, setReplyTo] = useState<{ id: string; email: string } | null>(null)
-  const [replyContent, setReplyContent] = useState('')
-
-  // Charger titre + rôle
+  // ─── Chargement du document et du rôle ────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [docRes, roleRes] = await Promise.all([
-          api.get(`/api/documents/${docId}`),
-          api.get(`/api/documents/${docId}/my-role`)
-        ])
-        setDocTitle(docRes.data.title)
-        setMyRole(roleRes.data.role)
-      } catch {
-        setDocTitle('Document')
-      }
-    }
-    load()
+    Promise.all([
+      api.get<DocumentDetail>(`/api/documents/${docId}`),
+      api.get<{ role: DocumentRole }>(`/api/documents/${docId}/my-role`)
+    ])
+      .then(([docRes, roleRes]) => {
+        setDoc(docRes.data)
+        setTitle(docRes.data.title)
+        setRole(roleRes.data.role)
+        useWorkspaceStore.getState().selectWorkspace(docRes.data.workspaceId).catch(() => {})
+      })
+      // 404 et 403 confondus volontairement : ne pas révéler l'existence du document
+      .catch(() => setLoadError('Document introuvable ou accès refusé'))
   }, [docId])
 
-  // WebSocket + awareness
+  // ─── Éditeur collaboratif ─────────────────────────────────────────────────
+  const editor = useEditor({
+    editable: false,
+    extensions: buildExtensions({
+      ydoc,
+      provider,
+      user: { name: user?.email.split('@')[0] ?? 'Anonyme', color: colorFor(user?.id ?? 'anon') },
+      searchMentions: searchMembers
+    }),
+    editorProps: { attributes: { class: 'document-body', spellcheck: 'true' } }
+  })
 
   useEffect(() => {
-    const serverUrl = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000'
-    // Connexion manuelle : le token est injecté juste avant chaque (re)connexion
-    const provider = new WebsocketProvider(serverUrl, docId, ydoc, { connect: false })
-    let disposed = false
+    editor?.setEditable(canEdit)
+  }, [editor, canEdit])
 
-    const connectWithFreshToken = async () => {
+  // Initialisation depuis le HTML sauvegardé, une seule fois par document :
+  // le drapeau Yjs partagé évite qu'un second client ne duplique le contenu
+  useEffect(() => {
+    if (!editor || !synced || !doc || !canEdit) return
+    const meta = ydoc.getMap('meta')
+    if (meta.get('initialized') || ydoc.getXmlFragment('default').length > 0) return
+    if (doc.content?.trim()) {
+      ydoc.transact(() => meta.set('initialized', true))
+      editor.commands.setContent(doc.content)
+    }
+  }, [editor, synced, doc, canEdit, ydoc])
+
+  // ─── Titre synchronisé en direct via Yjs + sauvegarde API ─────────────────
+  useEffect(() => {
+    const meta = ydoc.getMap<string>('meta')
+    const onChange = () => {
+      const remote = meta.get('title')
+      if (typeof remote !== 'string') return
+      setTitle(remote)
+      // La barre latérale reflète aussi le titre modifié par un collaborateur
+      useWorkspaceStore.getState().updateDocumentLocally(docId, { title: remote.trim() || 'Sans titre' })
+    }
+    meta.observe(onChange)
+    return () => meta.unobserve(onChange)
+  }, [ydoc, docId])
+
+  const titleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const changeTitle = (value: string) => {
+    setTitle(value)
+    ydoc.getMap('meta').set('title', value)
+    if (titleTimer.current) clearTimeout(titleTimer.current)
+    titleTimer.current = setTimeout(async () => {
+      const finalTitle = value.trim() || 'Sans titre'
       try {
-        const token = await getFreshAccessToken()
-        if (disposed) return
-        provider.url = `${serverUrl}/${docId}?token=${encodeURIComponent(token)}`
-        provider.connect()
+        await api.patch(`/api/documents/${docId}`, { title: finalTitle })
+        useWorkspaceStore.getState().updateDocumentLocally(docId, { title: finalTitle, updatedAt: new Date().toISOString() })
+      } catch { setSaveStatus('error') }
+    }, TITLE_SAVE_DELAY_MS)
+  }
+
+  // ─── Sauvegarde automatique (uniquement pour les modifications locales) ──
+  useEffect(() => {
+    if (!editor || !canEdit) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const save = async () => {
+      setSaveStatus('saving')
+      try {
+        await api.patch(`/api/documents/${docId}/content`, { content: editor.getHTML() })
+        setSaveStatus('saved')
+        notifyNewMentions()
       } catch {
-        setStatus('disconnected')
+        setSaveStatus('error')
       }
     }
 
-    // Le serveur ferme la connexion à l'expiration du token (ou en cas de
-    // refus) : on reprend la main pour se reconnecter avec un token frais
-    provider.on('connection-close', () => {
-      if (disposed) return
-      provider.disconnect()
-      setTimeout(connectWithFreshToken, 1000)
-    })
-
-    provider.awareness.setLocalStateField('user', {
-      name: user?.email ?? 'Anonyme',
-      color: userColor(user?.id ?? 'anon')
-    })
-    provider.on('status', (e: { status: string }) =>
-      setStatus(e.status as 'connecting' | 'connected' | 'disconnected')
-    )
-    provider.on('synced', async (isSynced: boolean) => {
-      if (!isSynced) return
-      // Initialisation depuis le HTML sauvegardé, une seule fois par document :
-      // le drapeau partagé évite qu'un second client ne duplique le contenu
-      const meta = ydoc.getMap('meta')
-      const isEmpty = ydoc.getXmlFragment('default').length === 0
-      if (!isEmpty || meta.get('initialized')) return
-      try {
-        const res = await api.get(`/api/documents/${docId}`)
-        if (meta.get('initialized') || ydoc.getXmlFragment('default').length > 0) return
-        if (res.data.content?.trim() && editorRef.current) {
-          ydoc.transact(() => meta.set('initialized', true))
-          editorRef.current.commands.setContent(res.data.content)
-        }
-      } catch { /* silencieux */ }
-    })
-    provider.awareness.on('change', () => {
-      const states = Array.from(provider.awareness.getStates().values()) as any[]
-      setAwarenessUsers(states.filter(s => s.user).map(s => ({ name: s.user.name, color: s.user.color })))
-    })
-
-    connectWithFreshToken()
-
-    return () => {
-      disposed = true
-      provider.destroy()
-    }
-  }, [docId, ydoc]) // eslint-disable-line react-hooks/exhaustive-deps
-
-
-
-  // Éditeur
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ undoRedo: false }),
-      Collaboration.configure({ document: ydoc }),
-      Mention.configure({
-        HTMLAttributes: { class: 'mention' },
-        suggestion: {
-          items: async ({ query }: { query: string }) => {
-            try {
-              const res = await api.get(`/api/workspaces/${workspaceId}`)
-              return (res.data.members as any[])
-                .map((m: any) => ({ id: m.user.id, label: m.user.email }))
-                .filter((m: any) => m.label.toLowerCase().includes(query.toLowerCase()))
-                .slice(0, 8)
-            } catch { return [] }
-          },
-          render: () => {
-            let component: ReactRenderer
-            let popup: any
-            return {
-              onStart: (props: any) => {
-                component = new ReactRenderer(MentionList, { props, editor: props.editor })
-                popup = tippy('body', {
-                  getReferenceClientRect: props.clientRect,
-                  appendTo: () => document.body,
-                  content: component.element,
-                  showOnCreate: true,
-                  interactive: true,
-                  trigger: 'manual',
-                  placement: 'bottom-start',
-                })
-              },
-              onUpdate: (props: any) => {
-                component.updateProps(props)
-                popup[0].setProps({ getReferenceClientRect: props.clientRect })
-              },
-              onKeyDown: (props: any) => {
-                if (props.event.key === 'Escape') { popup[0].hide(); return true }
-                return (component.ref as any)?.onKeyDown?.(props) ?? false
-              },
-              onExit: () => { popup[0].destroy(); component.destroy() }
-            }
-          }
-        }
-      })
-    ]
-  })
-
-  useEffect(() => { if (editor) editorRef.current = editor }, [editor])
-
-  useEffect(() => {
-    if (!editor) return
-    editor.setEditable(myRole !== 'VIEWER' && myRole !== 'COMMENTER')
-  }, [editor, myRole])
-
-  // Auto-save
-  useEffect(() => {
-    if (!editor) return
-    const handleUpdate = () => {
-      if (myRole === 'VIEWER' || myRole === 'COMMENTER') return
+    const onUpdate = ({ transaction }: EditorEvents['update']) => {
+      // Les changements reçus des collaborateurs sont sauvegardés par leur auteur
+      const sync = transaction.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean } | undefined
+      if (sync?.isChangeOrigin) return
       setSaveStatus('unsaved')
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = setTimeout(async () => {
-        setSaveStatus('saving')
-        try {
-          const html = editor.getHTML()
-          await api.patch(`/api/documents/${docId}/content`, { content: html })
-          const mentionEls = editor.getJSON().content
-            ?.flatMap((n: any) => n.content ?? [])
-            ?.filter((n: any) => n.type === 'mention') ?? []
-          if (mentionEls.length > 0) {
-            await Promise.allSettled(mentionEls.map((m: any) =>
-              api.post('/api/notifications/mention', {
-                mentionedUserId: m.attrs.id,
-                documentId: docId
-              })
-            ))
-          }
-          setSaveStatus('saved')
-        } catch { setSaveStatus('unsaved') }
-      }, 5000)
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(save, AUTOSAVE_DELAY_MS)
     }
-    editor.on('update', handleUpdate)
-    return () => {
-      editor.off('update', handleUpdate)
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [editor, docId, myRole])
 
-  // Snapshots
-  const loadSnapshots = async () => {
-    const res = await api.get(`/api/documents/${docId}/snapshots`)
-    const withContent = await Promise.all(
-      res.data.map(async (s: any) => {
-        const d = await api.get(`/api/documents/${docId}/snapshots/${s.id}`)
-        return d.data
+    // Notifie uniquement les mentions ajoutées depuis l'ouverture du document
+    const notifyNewMentions = () => {
+      const ids = new Set<string>()
+      editor.state.doc.descendants(node => {
+        if (node.type.name === 'mention' && node.attrs.id) ids.add(node.attrs.id)
       })
-    )
-    setSnapshots(withContent)
+      if (!notifiedMentionsRef.current) {
+        notifiedMentionsRef.current = ids
+        return
+      }
+      for (const id of ids) {
+        if (notifiedMentionsRef.current.has(id)) continue
+        notifiedMentionsRef.current.add(id)
+        api.post('/api/notifications/mention', { mentionedUserId: id, documentId: docId }).catch(() => {})
+      }
+    }
+
+    // Mentions déjà présentes à l'ouverture : pas de nouvelle notification
+    if (synced && !notifiedMentionsRef.current) {
+      notifiedMentionsRef.current = new Set()
+      editor.state.doc.descendants(node => {
+        if (node.type.name === 'mention' && node.attrs.id) notifiedMentionsRef.current!.add(node.attrs.id)
+      })
+    }
+
+    editor.on('update', onUpdate)
+    return () => {
+      editor.off('update', onUpdate)
+      // Sauvegarde immédiate d'une modification en attente (fermeture, changement de rôle…)
+      if (timer) {
+        clearTimeout(timer)
+        if (!editor.isDestroyed) save()
+      }
+    }
+  }, [editor, canEdit, docId, synced])
+
+  // ─── Commentaires ─────────────────────────────────────────────────────────
+  const fetchComments = useCallback(
+    () => api.get<Comment[]>(`/api/documents/${docId}/comments`).then(res => res.data),
+    [docId]
+  )
+  const loadComments = async () => setComments(await fetchComments())
+
+  const postComment = async (content: string, parentId?: string) => {
+    await api.post(`/api/documents/${docId}/comments`, { content, parentId })
+    await loadComments()
   }
 
-  const createSnapshot = async () => {
-    try {
-      await api.post(`/api/documents/${docId}/snapshots`, { name: snapshotName.trim() || undefined })
-      setSnapshotName('')
-      loadSnapshots()
-    } catch { alert('Erreur création snapshot') }
+  // ─── Versions ─────────────────────────────────────────────────────────────
+  const fetchSnapshots = useCallback(
+    () => api.get<Snapshot[]>(`/api/documents/${docId}/snapshots`).then(res => res.data),
+    [docId]
+  )
+  const loadSnapshots = async () => setSnapshots(await fetchSnapshots())
+
+  const saveSnapshot = async (name: string) => {
+    // Sauvegarde du contenu courant avant de figer la version
+    if (editor) await api.patch(`/api/documents/${docId}/content`, { content: editor.getHTML() })
+    await api.post(`/api/documents/${docId}/snapshots`, { name: name || undefined })
+    await loadSnapshots()
   }
 
-  const viewSnapshot = async (snapshotId: string) => {
-    const res = await api.get(`/api/documents/${docId}/snapshots/${snapshotId}`)
-    setPreviewSnapshot(res.data)
-  }
+  useEffect(() => {
+    if (panel === 'comments') fetchComments().then(setComments).catch(() => {})
+    if (panel === 'history') fetchSnapshots().then(setSnapshots).catch(() => {})
+  }, [panel, fetchComments, fetchSnapshots])
 
-  // Comments
-  const loadComments = async () => {
-    const res = await api.get(`/api/documents/${docId}/comments`)
-    setComments(res.data)
-  }
-
-  const postComment = async () => {
-    if (!newComment.trim()) return
-    await api.post(`/api/documents/${docId}/comments`, { content: newComment.trim() })
-    setNewComment('')
-    loadComments()
-  }
-
-  const postReply = async (parentId: string) => {
-    if (!replyContent.trim()) return
-    await api.post(`/api/documents/${docId}/comments`, { content: replyContent.trim(), parentId })
-    setReplyContent('')
-    setReplyTo(null)
-    loadComments()
-  }
-
-  const resolveComment = async (commentId: string) => {
-    await api.patch(`/api/documents/${docId}/comments/${commentId}/resolve`)
-    loadComments()
-  }
-
+  // ─── Export et suppression ────────────────────────────────────────────────
   const exportDocument = async (format: 'html' | 'md' | 'pdf') => {
     const res = await api.get(`/api/documents/${docId}/export?format=${format}`, { responseType: 'blob' })
-    const ext = format
-    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${docTitle}.${ext}`
+    a.download = `${title || 'document'}.${format}`
     a.click()
-    window.URL.revokeObjectURL(url)
+    URL.revokeObjectURL(url)
   }
 
-  const statusColor = { connecting: 'bg-yellow-400', connected: 'bg-emerald-400', disconnected: 'bg-red-400' }[status]
-  const statusLabel = { connecting: 'Connexion...', connected: 'Synchronisé', disconnected: 'Hors ligne' }[status]
-  const saveLabel = { saved: '✓ Sauvegardé', saving: 'Sauvegarde...', unsaved: '● Non sauvegardé' }[saveStatus]
-  const saveColor = { saved: 'text-emerald-500', saving: 'text-yellow-500', unsaved: 'text-gray-400' }[saveStatus]
+  const deleteDocument = async () => {
+    if (!confirm(`Supprimer « ${title} » ? Cette action est irréversible.`)) return
+    await useWorkspaceStore.getState().deleteDocument(docId)
+    navigate({ name: 'home' })
+  }
+
+  const words = useEditorState({
+    editor,
+    selector: ({ editor: e }) => e?.storage.characterCount?.words?.() ?? 0
+  })
+
+  if (loadError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <FileText size={40} className="text-ink-muted" />
+        <h1 className="text-lg font-semibold text-ink">{loadError}</h1>
+        <p className="text-sm text-ink-soft">Vérifiez le lien ou demandez l'accès au propriétaire du document.</p>
+        <Button onClick={() => navigate({ name: 'home' })}>Retour à l'accueil</Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-white font-sans">
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-2.5 border-b border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors border border-gray-200"
-          >
-            ← Retour
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400">📄</span>
-            <span className="font-medium text-gray-800 text-sm">{docTitle}</span>
-          </div>
+    <div className="flex h-full flex-col">
+      {/* ─── Barre supérieure ─── */}
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-white px-3">
+        {!sidebarOpen && (
+          <IconButton label="Afficher la barre latérale" onClick={openSidebar}><MenuIcon size={18} /></IconButton>
+        )}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <FileText size={16} className="shrink-0 text-accent" />
+          <span className="truncate text-sm text-ink">{title || 'Sans titre'}</span>
+          {role && ROLE_BADGE[role] && (
+            <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-ink-soft">{ROLE_BADGE[role]}</span>
+          )}
+          <SaveIndicator status={status} saveStatus={saveStatus} canEdit={canEdit} updatedAt={doc?.updatedAt} />
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Avatars collaborateurs */}
-          <div className="flex -space-x-1.5">
-            {awarenessUsers.map((u, i) => (
-              <div
-                key={i}
-                title={u.name}
-                style={{ background: u.color }}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-gray-800 border-2 border-white shadow-sm"
-              >
-                {u.name.charAt(0).toUpperCase()}
-              </div>
-            ))}
-          </div>
-
-          {/* Statut sauvegarde */}
-          <span className={`text-xs ${saveColor}`}>{saveLabel}</span>
-
-          {/* Statut sync */}
-          <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${statusColor}`} />
-            <span className="text-xs text-gray-500">{statusLabel}</span>
-          </div>
-
-          <NotificationBell onOpenDocument={() => {}} />
-
-          <span className="text-sm text-gray-500">{user?.email}</span>
-          <button
-            onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-800 px-2.5 py-1.5 rounded hover:bg-gray-100 transition-colors border border-gray-200"
-          >
-            Déconnexion
-          </button>
+        {/* Présence des collaborateurs */}
+        <div className="hidden items-center -space-x-1.5 sm:flex">
+          {collaborators.slice(0, 4).map(c => (
+            <Avatar key={c.clientId} email={c.name} color={c.color} size={28} ring />
+          ))}
+          {collaborators.length > 4 && (
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas text-xs text-ink-soft ring-2 ring-white">
+              +{collaborators.length - 4}
+            </span>
+          )}
         </div>
+
+        <IconButton label="Commentaires" active={panel === 'comments'} onClick={() => setPanel(p => (p === 'comments' ? null : 'comments'))}>
+          <MessageSquare size={18} />
+        </IconButton>
+        <IconButton label="Historique des versions" active={panel === 'history'} onClick={() => setPanel(p => (p === 'history' ? null : 'history'))}>
+          <History size={18} />
+        </IconButton>
+        <NotificationBell onOpenDocument={id => navigate({ name: 'document', docId: id })} />
+
+        {role === 'OWNER' && (
+          <Button variant="primary" size="sm" icon={<Users size={15} />} onClick={() => setDialog('share')} className="ml-1 h-8 rounded-full px-4">
+            Partager
+          </Button>
+        )}
+
+        <Menu
+          align="right"
+          trigger={({ toggle, open }) => (
+            <IconButton label="Plus d'actions" active={open} onClick={toggle}><MoreHorizontal size={18} /></IconButton>
+          )}
+        >
+          {close => (
+            <>
+              <MenuLabel>Télécharger</MenuLabel>
+              <MenuItem icon={<Download size={14} />} onClick={() => { close(); exportDocument('pdf') }}>Document PDF (.pdf)</MenuItem>
+              <MenuItem icon={<Download size={14} />} onClick={() => { close(); exportDocument('html') }}>Page web (.html)</MenuItem>
+              <MenuItem icon={<Download size={14} />} onClick={() => { close(); exportDocument('md') }}>Markdown (.md)</MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={<Link2 size={14} />} onClick={() => { close(); navigator.clipboard?.writeText(documentUrl(docId)) }}>Copier le lien</MenuItem>
+              {role === 'OWNER' && (
+                <MenuItem danger icon={<Trash2 size={14} />} onClick={() => { close(); deleteDocument() }}>Supprimer</MenuItem>
+              )}
+            </>
+          )}
+        </Menu>
       </header>
 
-      {/* Bandeau lecture seule */}
-      {(myRole === 'VIEWER' || myRole === 'COMMENTER') && (
-        <div className="px-6 py-2 bg-yellow-50 border-b border-yellow-200 text-sm text-yellow-800 flex items-center gap-2">
-          {myRole === 'VIEWER'
-            ? '👁 Mode lecture seule'
-            : '💬 Mode commentaire uniquement — édition désactivée'}
+      {/* ─── Barre de mise en forme ─── */}
+      {canEdit && editor && (
+        <div className="flex shrink-0 justify-center border-b border-line bg-white px-3 py-1.5">
+          <FormatToolbar editor={editor} />
         </div>
       )}
 
-      {/* Toolbar */}
-      <EditorToolbar
-        editor={editor}
-        myRole={myRole}
-        showHistory={showHistory}
-        showComments={showComments}
-        showPermissions={showPermissions}
-        onToggleHistory={() => { setShowHistory(!showHistory); if (!showHistory) loadSnapshots() }}
-        onToggleComments={() => { setShowComments(!showComments); if (!showComments) loadComments() }}
-        onTogglePermissions={() => setShowPermissions(!showPermissions)}
-        onExport={exportDocument}
-      />
-
-      {/* Zone principale */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* Éditeur */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="max-w-3xl mx-auto bg-white shadow-sm min-h-full">
-            <EditorContent editor={editor} />
+      <div className="flex min-h-0 flex-1">
+        {/* ─── Page ─── */}
+        <div className="relative flex-1 overflow-y-auto bg-canvas">
+          <div className="mx-auto my-6 min-h-[1056px] w-full max-w-[816px] bg-white px-6 py-12 shadow-page sm:my-8 sm:px-[72px] sm:py-16">
+            {doc ? (
+              <>
+                <textarea
+                  value={title}
+                  onChange={e => changeTitle(e.target.value.replace(/\n/g, ''))}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
+                  readOnly={!canEdit}
+                  placeholder="Sans titre"
+                  rows={1}
+                  aria-label="Titre du document"
+                  className="mb-4 w-full resize-none overflow-hidden bg-transparent text-[40px] font-bold leading-tight text-ink outline-none placeholder:text-line-strong [field-sizing:content]"
+                />
+                <EditorContent editor={editor} />
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="h-10 w-2/3 animate-pulse rounded bg-canvas" />
+                {[100, 95, 90, 60].map(w => <div key={w} className="h-4 animate-pulse rounded bg-canvas" style={{ width: `${w}%` }} />)}
+              </div>
+            )}
           </div>
+          {editor && (
+            <div className="pointer-events-none sticky bottom-3 ml-3 inline-block rounded-md bg-white/90 px-2 py-1 text-xs text-ink-muted shadow-sm">
+              {words} mot{words > 1 ? 's' : ''}
+            </div>
+          )}
         </div>
 
-        {/* Panel Versions */}
-        {showHistory && (
-          <HistoryPanel
-            snapshots={snapshots}
-            snapshotName={snapshotName}
-            onSnapshotNameChange={setSnapshotName}
-            onCreateSnapshot={createSnapshot}
-            onViewSnapshot={viewSnapshot}
-            onShowDiff={() => setShowDiff(true)}
-          />
-        )}
-
-        {/* Panel Commentaires */}
-        {showComments && (
+        {panel === 'comments' && (
           <CommentsPanel
             comments={comments}
-            newComment={newComment}
-            replyTo={replyTo}
-            replyContent={replyContent}
-            onNewCommentChange={setNewComment}
-            onPostComment={postComment}
-            onSetReplyTo={setReplyTo}
-            onReplyContentChange={setReplyContent}
-            onPostReply={postReply}
-            onResolve={resolveComment}
+            currentUserId={user?.id}
+            canComment={canComment}
+            canResolveAll={canEdit}
+            canDeleteAll={role === 'OWNER'}
+            onPost={postComment}
+            onResolve={async id => { await api.patch(`/api/documents/${docId}/comments/${id}/resolve`); await loadComments() }}
+            onDelete={async id => { await api.delete(`/api/documents/${docId}/comments/${id}`); await loadComments() }}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel === 'history' && (
+          <HistoryPanel
+            snapshots={snapshots}
+            canSave={canEdit}
+            onSave={saveSnapshot}
+            onView={setPreviewSnapshot}
+            onCompare={() => setDialog('diff')}
+            onClose={() => setPanel(null)}
           />
         )}
       </div>
 
-      {/* Modals */}
+      {dialog === 'share' && doc && (
+        <ShareDialog docId={docId} docTitle={title} workspaceId={doc.workspaceId} onClose={() => setDialog(null)} />
+      )}
+      {dialog === 'diff' && <SnapshotDiffDialog docId={docId} snapshots={snapshots} onClose={() => setDialog(null)} />}
       {previewSnapshot && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[70vw] max-h-[80vh] overflow-auto flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-gray-800">📄 {previewSnapshot.name}</h3>
-              <button onClick={() => setPreviewSnapshot(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
-            </div>
-            <div className="text-xs text-gray-400">
-              {new Date(previewSnapshot.createdAt).toLocaleDateString('fr-FR')}
-            </div>
-            <div
-              className="p-4 border border-gray-200 rounded-lg leading-relaxed text-sm"
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewSnapshot.content) }}
-            />
-          </div>
-        </div>
-      )}
-
-      {showDiff && (
-        <SnapshotDiff snapshots={snapshots} onClose={() => setShowDiff(false)} />
-      )}
-
-      {showPermissions && (
-        <DocumentPermissions
+        <SnapshotPreviewDialog
           docId={docId}
-          docTitle={docTitle}
-          workspaceId={workspaceId}
-          onClose={() => setShowPermissions(false)}
+          snapshot={previewSnapshot}
+          canRestore={canEdit}
+          onRestore={html => editor?.commands.setContent(html)}
+          onClose={() => setPreviewSnapshot(null)}
         />
       )}
     </div>
   )
+}
+
+function SaveIndicator({ status, saveStatus, canEdit, updatedAt }: {
+  status: string; saveStatus: SaveStatus; canEdit: boolean; updatedAt?: string
+}) {
+  const base = 'hidden shrink-0 items-center gap-1.5 text-xs md:flex'
+  if (status === 'disconnected') {
+    return <span className={`${base} text-amber-600`}><CloudOff size={14} /> Hors ligne — modifications conservées localement</span>
+  }
+  if (status === 'connecting') {
+    return <span className={`${base} text-ink-muted`}><Loader2 size={14} className="animate-spin" /> Connexion…</span>
+  }
+  if (!canEdit) {
+    return updatedAt ? <span className={`${base} text-ink-muted`}>Modifié {relativeTime(updatedAt)}</span> : null
+  }
+  const label = {
+    saved: 'Toutes les modifications ont été enregistrées',
+    saving: 'Enregistrement…',
+    unsaved: 'Modifications non enregistrées',
+    error: 'Échec de l\'enregistrement — nouvel essai à la prochaine modification',
+  }[saveStatus]
+  return <span className={`${base} ${saveStatus === 'error' ? 'text-red-600' : 'text-ink-muted'}`}>{label}</span>
 }

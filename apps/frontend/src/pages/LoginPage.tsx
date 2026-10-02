@@ -1,97 +1,91 @@
 import { useState } from 'react'
+import { FileText } from 'lucide-react'
 import { api } from '../api/client'
+import { apiError } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
+import { Button } from '../components/ui/Button'
 
-export default function LoginPage({ onLogin }: { onLogin: () => void }) {
+const MIN_PASSWORD_LENGTH = 8
+
+export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isRegister, setIsRegister] = useState(false)
   const [loading, setLoading] = useState(false)
-  const setAuth = useAuthStore((s) => s.setAuth)
+  const setAuth = useAuthStore(s => s.setAuth)
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!email || !password) return
+    if (isRegister && password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères`)
+      return
+    }
     setLoading(true)
     setError('')
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const res = await api.post(endpoint, { email, password })
       setAuth(res.data.user, res.data.accessToken, res.data.refreshToken)
-      onLogin()
-    } catch (e: any) {
-      setError(e.response?.data?.error ?? 'Erreur de connexion')
+    } catch (err) {
+      setError(apiError(err, 'Connexion impossible'))
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center font-sans">
-      <div className="w-full max-w-sm">
+  const input = 'h-10 w-full rounded-md border border-line-strong px-3 text-sm text-ink outline-none transition-shadow focus:border-accent focus:ring-2 focus:ring-accent-soft'
 
-        {/* Logo / Titre */}
-        <div className="text-center mb-8">
-          <div className="text-4xl mb-3">📝</div>
-          <h1 className="text-2xl font-semibold text-gray-800">Collab Editor</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {isRegister ? 'Créez votre compte' : 'Connectez-vous à votre espace'}
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-white px-4 font-sans antialiased">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-white shadow-sm">
+            <FileText size={24} />
+          </div>
+          <h1 className="text-2xl font-semibold text-ink">
+            {isRegister ? 'Créer un compte' : 'Bon retour parmi nous'}
+          </h1>
+          <p className="mt-1.5 text-sm text-ink-soft">
+            {isRegister ? 'Écrivez et collaborez en temps réel' : 'Connectez-vous à Collab Editor'}
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <div className="flex flex-col gap-4">
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <input
-                type="email"
-                placeholder="vous@exemple.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                className="px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-700">Mot de passe</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                className="px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-              />
-            </div>
-
-            {error && (
-              <div className="px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60 cursor-pointer mt-1"
-            >
-              {loading ? '...' : isRegister ? "S'inscrire" : 'Se connecter'}
-            </button>
-
-            <button
-              onClick={() => { setIsRegister(!isRegister); setError('') }}
-              className="text-sm text-blue-600 hover:text-blue-700 text-center cursor-pointer"
-            >
-              {isRegister ? 'Déjà un compte ? Se connecter' : "Pas de compte ? S'inscrire"}
-            </button>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink-soft">Adresse e-mail</label>
+            <input id="email" type="email" autoComplete="email" placeholder="vous@exemple.com" value={email} onChange={e => setEmail(e.target.value)} className={input} />
           </div>
-        </div>
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-ink-soft">Mot de passe</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
+              placeholder={isRegister ? `${MIN_PASSWORD_LENGTH} caractères minimum` : '••••••••'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className={input}
+            />
+          </div>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
-          Éditeur collaboratif temps réel
+          {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+          <Button type="submit" variant="primary" className="w-full" disabled={loading || !email || !password}>
+            {loading ? 'Un instant…' : isRegister ? 'Créer mon compte' : 'Continuer'}
+          </Button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-ink-soft">
+          {isRegister ? 'Déjà un compte ?' : 'Pas encore de compte ?'}{' '}
+          <button
+            type="button"
+            onClick={() => { setIsRegister(!isRegister); setError('') }}
+            className="font-medium text-accent hover:underline cursor-pointer"
+          >
+            {isRegister ? 'Se connecter' : 'Créer un compte'}
+          </button>
         </p>
       </div>
     </div>

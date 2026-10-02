@@ -1,44 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
+import { useWorkspaceStore } from './store/workspaceStore'
+import { useRoute } from './lib/router'
+import AppShell from './components/layout/AppShell'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
+import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
 
-type View = 'login' | 'dashboard' | 'editor'
-
 export default function App() {
-  const user = useAuthStore((s) => s.user)
-  const [view, setView] = useState<View>(user ? 'dashboard' : 'login')
+  const user = useAuthStore(s => s.user)
+  const route = useRoute()
 
-
-  const [currentDocId, setCurrentDocId] = useState<string | null>(null)
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null)
-
+  // À la déconnexion, on oublie les données du compte précédent
   useEffect(() => {
-    if (!user) setView('login')
+    if (!user) useWorkspaceStore.getState().reset()
   }, [user])
 
-  if (view === 'login') {
-    return <LoginPage onLogin={() => setView('dashboard')} />
-  }
-
-  if (view === 'editor' && currentDocId) {
-    return (
-      <EditorPage
-        docId={currentDocId}
-        workspaceId={currentWorkspaceId ?? ''}
-        onBack={() => setView('dashboard')}
-      />
-    )
-  }
+  if (!user) return <LoginPage />
 
   return (
-    <DashboardPage
-      onOpenDocument={(docId, workspaceId) => {
-        setCurrentDocId(docId)
-        setCurrentWorkspaceId(workspaceId)
-        setView('editor')
-      }}
-    />
+    <AppShell route={route}>
+      {({ sidebarOpen, openSidebar }) =>
+        route.name === 'document' ? (
+          // key : un nouveau document = nouvelle session Yjs et nouvel éditeur
+          <EditorPage key={route.docId} docId={route.docId} sidebarOpen={sidebarOpen} openSidebar={openSidebar} />
+        ) : (
+          <HomePage sidebarOpen={sidebarOpen} openSidebar={openSidebar} />
+        )
+      }
+    </AppShell>
   )
 }
