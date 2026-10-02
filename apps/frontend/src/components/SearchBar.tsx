@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { api } from '../api/client'
+import { sanitizeExcerpt } from '../lib/sanitize'
 
 interface SearchResult {
   id: string
@@ -113,7 +114,7 @@ export default function SearchBar({ workspaceId, onOpenDocument }: Props) {
               {r.excerpt && (
                 <div
                   style={{ fontSize: 12, color: '#666', lineHeight: 1.5 }}
-                  dangerouslySetInnerHTML={{ __html: r.excerpt }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeExcerpt(r.excerpt) }}
                 />
               )}
               <div style={{ fontSize: 11, color: '#bbb', marginTop: 4 }}>

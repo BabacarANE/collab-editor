@@ -7,7 +7,8 @@ import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import tippy from 'tippy.js'
 import { useAuthStore } from '../store/authStore'
-import { api } from '../api/client'
+import { api, getFreshAccessToken } from '../api/client'
+import { sanitizeHtml } from '../lib/sanitize'
 import EditorToolbar from '../components/EditorToolbar'
 import HistoryPanel from '../components/HistoryPanel'
 import CommentsPanel from '../components/CommentsPanel'
@@ -30,7 +31,7 @@ function userColor(userId: string): string {
 }
 
 export default function EditorPage({ docId, onBack, workspaceId }: Props) {
-  const { user, accessToken, logout } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const [docTitle, setDocTitle] = useState('Sans titre')
   const [myRole, setMyRole] = useState('OWNER')
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
@@ -77,12 +78,30 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
   // WebSocket + awareness
 
   useEffect(() => {
-    const provider = new WebsocketProvider(
-      import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000',
-      docId,
-      ydoc,
-      { params: { token: accessToken ?? '' } }
-    )
+    const serverUrl = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:4000'
+    // Connexion manuelle : le token est injecté juste avant chaque (re)connexion
+    const provider = new WebsocketProvider(serverUrl, docId, ydoc, { connect: false })
+    let disposed = false
+
+    const connectWithFreshToken = async () => {
+      try {
+        const token = await getFreshAccessToken()
+        if (disposed) return
+        provider.url = `${serverUrl}/${docId}?token=${encodeURIComponent(token)}`
+        provider.connect()
+      } catch {
+        setStatus('disconnected')
+      }
+    }
+
+    // Le serveur ferme la connexion à l'expiration du token (ou en cas de
+    // refus) : on reprend la main pour se reconnecter avec un token frais
+    provider.on('connection-close', () => {
+      if (disposed) return
+      provider.disconnect()
+      setTimeout(connectWithFreshToken, 1000)
+    })
+
     provider.awareness.setLocalStateField('user', {
       name: user?.email ?? 'Anonyme',
       color: userColor(user?.id ?? 'anon')
@@ -90,30 +109,41 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
     provider.on('status', (e: { status: string }) =>
       setStatus(e.status as 'connecting' | 'connected' | 'disconnected')
     )
-    provider.on('synced', async () => {
+    provider.on('synced', async (isSynced: boolean) => {
+      if (!isSynced) return
+      // Initialisation depuis le HTML sauvegardé, une seule fois par document :
+      // le drapeau partagé évite qu'un second client ne duplique le contenu
+      const meta = ydoc.getMap('meta')
       const isEmpty = ydoc.getXmlFragment('default').length === 0
-      if (isEmpty) {
-        try {
-          const res = await api.get(`/api/documents/${docId}`)
-          if (res.data.content?.trim() && editorRef.current) {
-            editorRef.current.commands.setContent(res.data.content)
-          }
-        } catch { /* silencieux */ }
-      }
+      if (!isEmpty || meta.get('initialized')) return
+      try {
+        const res = await api.get(`/api/documents/${docId}`)
+        if (meta.get('initialized') || ydoc.getXmlFragment('default').length > 0) return
+        if (res.data.content?.trim() && editorRef.current) {
+          ydoc.transact(() => meta.set('initialized', true))
+          editorRef.current.commands.setContent(res.data.content)
+        }
+      } catch { /* silencieux */ }
     })
     provider.awareness.on('change', () => {
       const states = Array.from(provider.awareness.getStates().values()) as any[]
       setAwarenessUsers(states.filter(s => s.user).map(s => ({ name: s.user.name, color: s.user.color })))
     })
-    return () => provider.disconnect()
-  }, [])
+
+    connectWithFreshToken()
+
+    return () => {
+      disposed = true
+      provider.destroy()
+    }
+  }, [docId, ydoc]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
   // Éditeur
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: false, undoRedo: false }),
+      StarterKit.configure({ undoRedo: false }),
       Collaboration.configure({ document: ydoc }),
       Mention.configure({
         HTMLAttributes: { class: 'mention' },
@@ -182,12 +212,10 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
             ?.flatMap((n: any) => n.content ?? [])
             ?.filter((n: any) => n.type === 'mention') ?? []
           if (mentionEls.length > 0) {
-            const docRes = await api.get(`/api/documents/${docId}`)
             await Promise.allSettled(mentionEls.map((m: any) =>
               api.post('/api/notifications/mention', {
                 mentionedUserId: m.attrs.id,
-                documentId: docId,
-                documentTitle: docRes.data.title
+                documentId: docId
               })
             ))
           }
@@ -397,7 +425,7 @@ export default function EditorPage({ docId, onBack, workspaceId }: Props) {
             </div>
             <div
               className="p-4 border border-gray-200 rounded-lg leading-relaxed text-sm"
-              dangerouslySetInnerHTML={{ __html: previewSnapshot.content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewSnapshot.content) }}
             />
           </div>
         </div>
