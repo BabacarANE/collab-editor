@@ -22,6 +22,10 @@ COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/collab/package.json ./apps/collab/
 COPY apps/persistence/package.json ./apps/persistence/
 
+# Chromium système utilisé par Puppeteer : pas de téléchargement à l'install
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
 # Copier le code source
@@ -30,8 +34,6 @@ COPY apps/api/ ./apps/api/
 # Générer le client Prisma
 RUN pnpm --filter @collab/api exec prisma generate
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 
 EXPOSE 3000

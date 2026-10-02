@@ -32,17 +32,80 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      # Sans client Prisma généré, tous les types Prisma valent any et le
+      # typecheck ne détecte rien
+      - name: Generate Prisma clients
+        run: |
+          pnpm --filter @collab/api exec prisma generate
+          pnpm --filter @collab/persistence exec prisma generate
+
       - name: Type check API
         run: pnpm --filter @collab/api exec tsc --noEmit
 
+      - name: Type check Collab
+        run: pnpm --filter @collab/collab exec tsc --noEmit
+
+      - name: Type check Persistence
+        run: pnpm --filter @collab/persistence exec tsc --noEmit
+
+      # tsc -b suit les références du tsconfig racine (tsc --noEmit seul
+      # ne vérifie aucun fichier car il contient files: [])
       - name: Type check Frontend
-        run: pnpm --filter frontend exec tsc --noEmit
+        run: pnpm --filter frontend exec tsc -b
+
+  # ─── Job 1b : Tests d'intégration API ─────────────────────────────────────
+  test:
+    name: API Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: collabuser
+          POSTGRES_PASSWORD: collabpass123
+          POSTGRES_DB: collab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U collabuser -d collab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://collabuser:collabpass123@localhost:5432/collab
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+      - name: Migrate database
+        run: |
+          pnpm --filter @collab/api exec prisma generate
+          pnpm --filter @collab/api exec prisma migrate deploy
+
+      - name: Run API tests
+        run: pnpm --filter @collab/api test
 
   # ─── Job 2 : Build Docker images ──────────────────────────────────────────
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, test]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
