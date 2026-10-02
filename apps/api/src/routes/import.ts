@@ -4,6 +4,9 @@ import { marked } from 'marked'
 import prisma from '../lib/prisma'
 import { authenticate } from '../lib/auth'
 import { isWorkspaceMember } from '../lib/access'
+import { escapeHtml, sanitizeDocumentHtml } from '../lib/html'
+
+const MAX_TITLE_LENGTH = 255
 
 
 export async function importRoutes(app: FastifyInstance) {
@@ -60,7 +63,7 @@ export async function importRoutes(app: FastifyInstance) {
       html = lines
         .map(l => l.trim())
         .filter(l => l.length > 0)
-        .map(l => `<p>${l}</p>`)
+        .map(l => `<p>${escapeHtml(l)}</p>`)
         .join('\n')
     } else {
       return reply.status(400).send({ error: 'Format non supporté. Utiliser .md, .docx ou .txt' })
@@ -68,8 +71,8 @@ export async function importRoutes(app: FastifyInstance) {
 
     const document = await prisma.document.create({
       data: {
-        title,
-        content: html,
+        title: title.slice(0, MAX_TITLE_LENGTH) || 'Sans titre',
+        content: sanitizeDocumentHtml(html),
         workspaceId,
         ownerId: userId
       },

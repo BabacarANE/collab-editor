@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import prisma from '../lib/prisma'
 import { authenticate } from '../lib/auth'
+import { contentDisposition, escapeHtml, sanitizeDocumentHtml } from '../lib/html'
 import { canAccessDocument, getDocumentRole, isWorkspaceMember, roleAllows } from '../lib/access'
 
 const MAX_TITLE_LENGTH = 255
@@ -172,6 +173,10 @@ export async function documentRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { content } = request.body as { content: string }
 
+    if (typeof content !== 'string') {
+      return reply.status(400).send({ error: 'content requis' })
+    }
+
     // Vérifier que l'utilisateur a le droit d'éditer
     const document = await prisma.document.findFirst({
       where: {
@@ -190,7 +195,8 @@ export async function documentRoutes(app: FastifyInstance) {
 
     await prisma.document.update({
       where: { id },
-      data: { content }
+      // Le HTML est nettoyé côté serveur : il est ré-affiché et exporté
+      data: { content: sanitizeDocumentHtml(content) }
     })
 
     return reply.status(204).send()
@@ -225,7 +231,7 @@ export async function documentRoutes(app: FastifyInstance) {
       data: {
         documentId: id,
         name: name?.trim() || `Version du ${new Date().toLocaleDateString('fr-FR')}`,
-        content: document.content,
+        content: sanitizeDocumentHtml(document.content),
         createdBy: userId
       },
       select: {
@@ -466,8 +472,9 @@ export async function documentRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Document non trouvé' })
     }
 
-    const content = document.content ?? ''
-    const title = document.title
+    // Nettoyage systématique : le contenu peut dater d'avant la sanitization
+    const content = sanitizeDocumentHtml(document.content)
+    const title = escapeHtml(document.title)
 
     if (format === 'html') {
       const html = `<!DOCTYPE html>
@@ -489,16 +496,16 @@ export async function documentRoutes(app: FastifyInstance) {
         </html>`
 
       reply.header('Content-Type', 'text/html; charset=utf-8')
-      reply.header('Content-Disposition', `attachment; filename="${title}.html"`)
+      reply.header('Content-Disposition', contentDisposition(document.title, 'html'))
       return reply.send(html)
     }
 
     if (format === 'md') {
       const { NodeHtmlMarkdown } = await import('node-html-markdown')
-      const markdown = `# ${title}\n\n${NodeHtmlMarkdown.translate(content)}`
+      const markdown = `# ${document.title}\n\n${NodeHtmlMarkdown.translate(content)}`
 
       reply.header('Content-Type', 'text/markdown; charset=utf-8')
-      reply.header('Content-Disposition', `attachment; filename="${title}.md"`)
+      reply.header('Content-Disposition', contentDisposition(document.title, 'md'))
       return reply.send(markdown)
     }
 
@@ -517,6 +524,16 @@ export async function documentRoutes(app: FastifyInstance) {
 
         try {
           const page = await browser.newPage()
+
+          // Aucun accès réseau ni JavaScript pendant le rendu : empêche toute
+          // SSRF (services internes, metadata cloud, file://) via le contenu
+          await page.setJavaScriptEnabled(false)
+          await page.setRequestInterception(true)
+          page.on('request', req => {
+            const url = req.url()
+            if (url.startsWith('data:') || url === 'about:blank') req.continue()
+            else req.abort()
+          })
 
           const html = `<!DOCTYPE html>
   <html lang="fr">
@@ -594,7 +611,7 @@ export async function documentRoutes(app: FastifyInstance) {
   </body>
   </html>`
 
-          await page.setContent(html, { waitUntil: 'load' })
+          await page.setContent(html, { waitUntil: 'load', timeout: 15000 })
 
           const pdfBuffer = await page.pdf({
             format: 'A4',
@@ -603,7 +620,7 @@ export async function documentRoutes(app: FastifyInstance) {
           })
 
           reply.header('Content-Type', 'application/pdf')
-          reply.header('Content-Disposition', `attachment; filename="${title}.pdf"`)
+          reply.header('Content-Disposition', contentDisposition(document.title, 'pdf'))
           return reply.send(Buffer.from(pdfBuffer))
         } finally {
           await browser.close()
