@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "kafkajs": "^2.2.4",
