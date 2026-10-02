@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "NODE_ENV=test AUTH_RATE_LIMIT_MAX=1000 tsx --test test/*.test.ts"
+    "test": "NODE_ENV=test AUTH_RATE_LIMIT_MAX=1000 tsx --test test/*.test.ts test/unit/*.test.ts",
+    "test:unit": "NODE_ENV=test tsx --test test/unit/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

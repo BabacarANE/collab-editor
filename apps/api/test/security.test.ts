@@ -4,9 +4,11 @@ import { after, before, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { buildApp } from '../src/app'
-import prisma from '../src/lib/prisma'
+import { config } from '../src/config'
+import { createPrismaClient } from '../src/infrastructure/prisma'
 
-const app = buildApp()
+const prisma = createPrismaClient(config.databaseUrl)
+const app = buildApp({ prisma })
 
 interface TestUser { id: string; email: string; accessToken: string; refreshToken: string }
 

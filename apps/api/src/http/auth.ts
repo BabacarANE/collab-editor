@@ -1,12 +1,11 @@
-import { FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 
-export interface AccessTokenPayload {
+interface AccessTokenPayload {
   userId: string
   type?: string
 }
 
-// preHandler commun à toutes les routes protégées.
-// Refuse les refresh tokens : seul un access token donne accès à l'API.
+// preHandler des routes protégées : seul un access token donne accès à l'API
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
     const payload = await request.jwtVerify<AccessTokenPayload>()
