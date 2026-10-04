@@ -54,7 +54,9 @@ export function buildApp(deps: AppDependencies = {}) {
     return reply.status(status).send({ error: status >= 500 ? 'Erreur interne' : error.message })
   })
 
-  app.get('/health', async () => ({ status: 'ok' }))
+  const healthHandler = async () => ({ status: 'ok' })
+  app.get('/health', healthHandler)
+  app.get('/api/health', healthHandler)
 
   app.register(async scope => {
     const services = createServices({
