@@ -5,24 +5,15 @@ metadata:
   namespace: monitoring
 data:
   alertmanager.yml: |
-    global:
-      slack_api_url: '${SLACK_WEBHOOK_URL}'
-
+    # Pas de notification pour l'instant : les alertes restent visibles dans
+    # Prometheus et Alertmanager. Pour activer Slack, ajouter slack_api_url
+    # (via un Secret) et une slack_configs dans le receiver.
     route:
       group_by: ['alertname', 'namespace']
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 1h
-      receiver: 'slack'
+      receiver: 'default'
 
     receivers:
-      - name: 'slack'
-        slack_configs:
-          - channel: '#nouveau-canal'
-            title: '{{ .GroupLabels.alertname }}'
-            text: |
-              {{ range .Alerts }}
-              *{{ .Annotations.summary }}*
-              {{ .Annotations.description }}
-              {{ end }}
-            send_resolved: true
+      - name: 'default'
