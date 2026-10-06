@@ -1,0 +1,40 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · theme: custom (teal calme)
+ * enrichment: none (démo CSS du produit) · nav: N5 floating pill · footer: Ft2 inline
+ * motion: reveal horizontal au scroll + démo jouée une seule fois · transform/opacity uniquement
+ */
+
+/* ─── Révélation au scroll : balayage horizontal, une seule fois ─────────── */
+.lp .reveal {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: opacity 420ms var(--ease-out), transform 420ms var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.lp .reveal.is-in { opacity: 1; transform: none; }
+
+/* ─── Démo du hero : séquence unique, état final conservé (fill: both) ──── */
+.lp .demo * { animation-fill-mode: both; animation-timing-function: var(--ease-out); }
+
+@keyframes demo-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes demo-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes demo-pop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
+@keyframes demo-caret-a { from { opacity: 0; transform: translateX(-72px); } 25% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes demo-caret-b { from { opacity: 0; transform: translate(60px, -22px); } 25% { opacity: 1; } to { opacity: 1; transform: none; } }
+
+.lp .demo-title { animation: demo-fade 480ms 200ms; }
+.lp .demo-line { transform-origin: left center; animation: demo-line 620ms var(--ease-out) both; animation-delay: calc(500ms + var(--n, 0) * 260ms); }
+.lp .demo-presence > * { animation: demo-pop 320ms; animation-delay: calc(700ms + var(--n, 0) * 160ms); }
+.lp .demo-caret-a { animation: demo-caret-a 700ms 1300ms; }
+.lp .demo-caret-b { animation: demo-caret-b 700ms 1800ms; }
+.lp .demo-comment { animation: demo-fade 520ms 2500ms; }
+.lp .demo-saved { animation: demo-fade 360ms 3100ms; }
+
+/* ─── Détails ────────────────────────────────────────────────────────────── */
+.lp .stage-rule { border-top: 2px solid oklch(var(--c-ink)); }
+.lp .num { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.lp h1, .lp h2, .lp h3 { overflow-wrap: anywhere; min-width: 0; text-wrap: balance; }
+
+/* Mouvement réduit : tout est déjà à l'état final, sans déplacement */
+@media (prefers-reduced-motion: reduce) {
+  .lp .reveal { transform: none; opacity: 1; transition: none; }
+}

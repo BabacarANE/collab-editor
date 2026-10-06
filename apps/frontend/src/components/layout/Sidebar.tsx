@@ -7,6 +7,7 @@ import { documentUrl, navigate, type Route } from '../../lib/router'
 import { useAuthStore } from '../../store/authStore'
 import { useActiveWorkspace, useWorkspaceStore } from '../../store/workspaceStore'
 import type { DocumentSummary } from '../../types'
+import { ThemeToggle } from '../ui/ThemeToggle'
 import { Avatar } from '../ui/Avatar'
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../ui/Menu'
 import ImportDialog from '../dialogs/ImportDialog'
@@ -28,7 +29,7 @@ function NavItem({ icon, label, onClick, active, hint }: {
     <button
       onClick={onClick}
       className={`flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm cursor-pointer ${
-        active ? 'bg-hover font-medium text-ink' : 'text-ink-soft hover:bg-hover hover:text-ink'
+        active ? 'bg-accent-soft font-medium text-accent' : 'text-ink-soft hover:bg-hover hover:text-ink'
       }`}
     >
       <span className="flex w-5 justify-center">{icon}</span>
@@ -70,7 +71,7 @@ export default function Sidebar({ route, onCollapse, onOpenSearch }: Props) {
             width="w-64"
             trigger={({ toggle }) => (
               <button onClick={toggle} className="flex h-10 w-full items-center gap-2 rounded-md px-2 hover:bg-hover cursor-pointer">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-ink text-xs font-semibold text-white">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-ink text-xs font-semibold text-surface">
                   {(active?.name ?? '?').charAt(0).toUpperCase()}
                 </span>
                 <span className="flex-1 truncate text-left text-sm font-semibold text-ink">
@@ -135,7 +136,7 @@ export default function Sidebar({ route, onCollapse, onOpenSearch }: Props) {
           {documents.map(doc => (
             <div
               key={doc.id}
-              className={`group flex h-8 items-center rounded-md pr-1 ${activeDocId === doc.id ? 'bg-hover' : 'hover:bg-hover'}`}
+              className={`group flex h-8 items-center rounded-md pr-1 ${activeDocId === doc.id ? 'bg-accent-soft' : 'hover:bg-hover'}`}
             >
               <button
                 onClick={() => navigate({ name: 'document', docId: doc.id })}
@@ -183,7 +184,8 @@ export default function Sidebar({ route, onCollapse, onOpenSearch }: Props) {
         {user && (
           <div className="mt-1 flex items-center gap-2.5 px-2 py-1.5">
             <Avatar email={user.email} id={user.id} size={22} />
-            <span className="truncate text-xs text-ink-soft">{user.email}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-ink-soft">{user.email}</span>
+            <ThemeToggle />
           </div>
         )}
       </div>

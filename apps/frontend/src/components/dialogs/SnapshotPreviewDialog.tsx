@@ -45,7 +45,7 @@ export default function SnapshotPreviewDialog({ docId, snapshot, canRestore, onR
       <p className="-mt-2 mb-3 text-xs text-ink-muted">
         Enregistrée {relativeTime(snapshot.createdAt)} par {snapshot.author.email}
       </p>
-      <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-line bg-white">
+      <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-line bg-surface">
         {content === null ? (
           <p className="p-6 text-sm text-ink-muted">Chargement…</p>
         ) : (

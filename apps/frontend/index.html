@@ -5,7 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Collab Editor</title>
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfcfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c2020" media="(prefers-color-scheme: dark)" />
+    <script>
+      // Applique le thème choisi avant le premier rendu (évite le flash blanc)
+      try {
+        var t = localStorage.getItem('collab:theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

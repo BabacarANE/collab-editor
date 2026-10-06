@@ -103,7 +103,7 @@ export default function ShareDialog({ docId, docTitle, workspaceId, onClose }: P
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder="Ajouter des personnes par e-mail"
-          className="h-10 flex-1 rounded-md border border-line-strong px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+          className="h-10 flex-1 rounded-md border border-control px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
         />
         <datalist id="share-suggestions">
           {suggestions.map(m => <option key={m.user.id} value={m.user.email} />)}
@@ -111,14 +111,14 @@ export default function ShareDialog({ docId, docTitle, workspaceId, onClose }: P
         <select
           value={role}
           onChange={e => setRole(e.target.value as GrantableRole)}
-          className="h-10 rounded-md border border-line-strong bg-white px-2 text-sm"
+          className="h-10 rounded-md border border-control bg-surface px-2 text-sm"
         >
           {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
         <Button type="submit" variant="primary" className="h-10">Partager</Button>
       </form>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       <h3 className="mb-1 mt-5 text-sm font-medium text-ink">Personnes ayant accès</h3>
       <ul className="-mx-2">

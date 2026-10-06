@@ -12,8 +12,8 @@ export default defineConfig({
         name: 'Collab Editor',
         short_name: 'Collab',
         description: 'Éditeur de texte collaboratif temps réel',
-        theme_color: '#1a73e8',
-        background_color: '#ffffff',
+        theme_color: '#00706a',
+        background_color: '#fbfcfc',
         display: 'standalone',
         start_url: '/',
         icons: [

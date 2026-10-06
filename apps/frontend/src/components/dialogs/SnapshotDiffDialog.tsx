@@ -52,7 +52,7 @@ export default function SnapshotDiffDialog({ docId, snapshots, onClose }: Props)
   const select = (value: string, onChange: (v: string) => void, label: string) => (
     <label className="flex-1">
       <span className="mb-1 block text-xs text-ink-muted">{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-md border border-line-strong bg-white px-2 text-sm">
+      <select value={value} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-md border border-control bg-surface px-2 text-sm">
         {snapshots.map(s => <option key={s.id} value={s.id}>{s.name} — {relativeTime(s.createdAt)}</option>)}
       </select>
     </label>
@@ -67,11 +67,11 @@ export default function SnapshotDiffDialog({ docId, snapshots, onClose }: Props)
       </div>
 
       <div className="mt-3 flex gap-3 text-xs">
-        <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">Ajouté</span>
-        <span className="rounded bg-red-100 px-2 py-0.5 text-red-800 line-through">Supprimé</span>
+        <span className="rounded bg-success-soft px-2 py-0.5 text-success">Ajouté</span>
+        <span className="rounded bg-danger-soft px-2 py-0.5 text-danger line-through">Supprimé</span>
       </div>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       <div className="mt-3 max-h-[50vh] min-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-line p-4 text-sm leading-7 text-ink">
         {leftId === rightId ? (
@@ -79,8 +79,8 @@ export default function SnapshotDiffDialog({ docId, snapshots, onClose }: Props)
         ) : !diff ? (
           <span className="text-ink-muted">Chargement…</span>
         ) : diff.map(([op, text], i) =>
-          op === 1 ? <ins key={i} className="rounded-sm bg-emerald-100 text-emerald-900 no-underline">{text}</ins>
-          : op === -1 ? <del key={i} className="rounded-sm bg-red-100 text-red-900">{text}</del>
+          op === 1 ? <ins key={i} className="rounded-sm bg-success-soft text-success no-underline">{text}</ins>
+          : op === -1 ? <del key={i} className="rounded-sm bg-danger-soft text-danger">{text}</del>
           : <span key={i}>{text}</span>
         )}
       </div>

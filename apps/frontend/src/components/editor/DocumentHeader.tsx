@@ -35,7 +35,7 @@ export default function DocumentHeader({
   onOpenSidebar, onTogglePanel, onShare, onExport, onCopyLink, onDelete
 }: Props) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-white px-3">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3">
       {!sidebarOpen && (
         <IconButton label="Afficher la barre latérale" onClick={onOpenSidebar}><MenuIcon size={18} /></IconButton>
       )}
@@ -54,7 +54,7 @@ export default function DocumentHeader({
           <Avatar key={c.clientId} email={c.name} color={c.color} size={28} ring />
         ))}
         {collaborators.length > MAX_AVATARS && (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas text-xs text-ink-soft ring-2 ring-white">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas text-xs text-ink-soft ring-2 ring-surface">
             +{collaborators.length - MAX_AVATARS}
           </span>
         )}
