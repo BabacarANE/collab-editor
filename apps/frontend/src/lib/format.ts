@@ -16,7 +16,17 @@ export function initials(email: string): string {
   return (email.split('@')[0] || '?').slice(0, 2).toUpperCase()
 }
 
-const COLORS = ['#e2445c', '#f2994a', '#d4a72c', '#27ae60', '#2d9cdb', '#7b61ff', '#c2185b', '#00897b']
+// Teintes réparties sur le cercle chromatique, L≈48 : texte blanc lisible dans les pastilles de curseur
+const COLORS = [
+  'oklch(52% 0.19 25)',
+  'oklch(54% 0.14 55)',
+  'oklch(52% 0.12 90)',
+  'oklch(52% 0.14 150)',
+  'oklch(52% 0.10 215)',
+  'oklch(50% 0.17 265)',
+  'oklch(50% 0.18 315)',
+  'oklch(52% 0.17 350)',
+]
 
 export function colorFor(id: string): string {
   let hash = 0

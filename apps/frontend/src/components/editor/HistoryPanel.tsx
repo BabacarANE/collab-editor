@@ -30,7 +30,7 @@ export default function HistoryPanel({ snapshots, canSave, onSave, onView, onCom
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-line bg-white animate-slide-in">
+    <aside className="flex w-80 shrink-0 flex-col border-l border-line bg-surface animate-slide-in">
       <div className="flex h-12 items-center justify-between border-b border-line px-4">
         <span className="text-sm font-semibold text-ink">Historique des versions</span>
         <button onClick={onClose} aria-label="Fermer" className="rounded-md p-1 text-ink-muted hover:bg-hover hover:text-ink cursor-pointer">
@@ -44,7 +44,7 @@ export default function HistoryPanel({ snapshots, canSave, onSave, onView, onCom
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Nommer cette version (facultatif)"
-            className="h-9 w-full rounded-md border border-line-strong px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+            className="h-9 w-full rounded-md border border-control px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           />
           <Button type="submit" variant="primary" size="sm" className="w-full" disabled={busy}>
             Enregistrer la version actuelle

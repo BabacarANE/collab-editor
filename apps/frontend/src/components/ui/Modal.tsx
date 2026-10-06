@@ -19,10 +19,10 @@ export function Modal({ title, onClose, children, footer, width = 'max-w-lg' }: 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-[10vh] animate-fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--scrim)] px-4 py-[10vh] animate-fade-in"
       onMouseDown={e => e.target === e.currentTarget && onClose()}
     >
-      <div role="dialog" aria-modal="true" className={`w-full ${width} rounded-xl bg-white shadow-pop animate-pop-in`}>
+      <div role="dialog" aria-modal="true" className={`w-full ${width} rounded-xl bg-raised shadow-pop animate-pop-in`}>
         {title && (
           <div className="flex items-center justify-between gap-4 px-6 pt-5">
             <h2 className="text-lg font-semibold text-ink">{title}</h2>

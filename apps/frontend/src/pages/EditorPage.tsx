@@ -126,7 +126,7 @@ export default function EditorPage({ docId, sidebarOpen, openSidebar }: Props) {
       />
 
       {canEdit && editor && (
-        <div className="flex shrink-0 justify-center border-b border-line bg-white px-3 py-1.5">
+        <div className="flex shrink-0 justify-center border-b border-line bg-surface px-3 py-1.5">
           <FormatToolbar editor={editor} />
         </div>
       )}
@@ -134,7 +134,7 @@ export default function EditorPage({ docId, sidebarOpen, openSidebar }: Props) {
       <div className="flex min-h-0 flex-1">
         {/* Page « papier » centrée */}
         <div className="relative flex-1 overflow-y-auto bg-canvas">
-          <div className="mx-auto my-6 min-h-[1056px] w-full max-w-[816px] bg-white px-6 py-12 shadow-page sm:my-8 sm:px-[72px] sm:py-16">
+          <div className="mx-auto my-6 min-h-[1056px] w-full max-w-[816px] bg-surface px-6 py-12 shadow-page sm:my-8 sm:px-[72px] sm:py-16">
             {doc ? (
               <>
                 <textarea
@@ -145,7 +145,7 @@ export default function EditorPage({ docId, sidebarOpen, openSidebar }: Props) {
                   placeholder="Sans titre"
                   rows={1}
                   aria-label="Titre du document"
-                  className="mb-4 w-full resize-none overflow-hidden bg-transparent text-[40px] font-bold leading-tight text-ink outline-none placeholder:text-line-strong [field-sizing:content]"
+                  className="mb-4 w-full resize-none overflow-hidden bg-transparent text-[40px] font-bold leading-tight text-ink outline-none placeholder:text-ink-muted [field-sizing:content]"
                 />
                 <EditorContent editor={editor} />
               </>
@@ -157,7 +157,7 @@ export default function EditorPage({ docId, sidebarOpen, openSidebar }: Props) {
             )}
           </div>
           {editor && (
-            <div className="pointer-events-none sticky bottom-3 ml-3 inline-block rounded-md bg-white/90 px-2 py-1 text-xs text-ink-muted shadow-sm">
+            <div className="pointer-events-none sticky bottom-3 ml-3 inline-block rounded-md bg-surface/90 px-2 py-1 text-xs text-ink-muted shadow-sm">
               {words} mot{words > 1 ? 's' : ''}
             </div>
           )}
