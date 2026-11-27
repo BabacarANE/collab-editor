@@ -46,9 +46,9 @@ export default function PromptDialog({
           value={value}
           onChange={e => { setValue(e.target.value); setError('') }}
           placeholder={placeholder}
-          className="h-10 w-full rounded-md border border-line-strong px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+          className="h-10 w-full rounded-md border border-control px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
         />
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose}>Annuler</Button>
           <Button type="submit" variant="primary" disabled={busy}>{confirmLabel}</Button>

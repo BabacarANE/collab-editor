@@ -32,7 +32,7 @@ export function Menu({ trigger, children, align = 'left', width = 'w-56' }: Menu
       {open && (
         <div
           role="menu"
-          className={`absolute top-full z-40 mt-1 ${width} rounded-lg bg-white p-1 shadow-pop animate-pop-in ${align === 'right' ? 'right-0' : 'left-0'}`}
+          className={`absolute top-full z-40 mt-1 ${width} rounded-lg bg-raised p-1 shadow-pop animate-pop-in ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
           {children(() => setOpen(false))}
         </div>
@@ -56,7 +56,7 @@ export function MenuItem({ icon, children, onClick, danger, hint }: ItemProps) {
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm cursor-pointer ${
-        danger ? 'text-red-600 hover:bg-red-50' : 'text-ink hover:bg-hover'
+        danger ? 'text-danger hover:bg-danger-soft' : 'text-ink hover:bg-hover'
       }`}
     >
       {icon && <span className="flex w-4 justify-center text-ink-soft">{icon}</span>}

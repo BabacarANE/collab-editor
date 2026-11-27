@@ -71,10 +71,10 @@ export default function SearchDialog({ onClose, onOpenDocument }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[12vh] animate-fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-[var(--scrim)] px-4 pt-[12vh] animate-fade-in"
       onMouseDown={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-pop animate-pop-in" onKeyDown={onKeyDown}>
+      <div className="w-full max-w-xl overflow-hidden rounded-xl bg-raised shadow-pop animate-pop-in" onKeyDown={onKeyDown}>
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Search size={18} className="text-ink-muted" />
           <input
@@ -108,7 +108,7 @@ export default function SearchDialog({ onClose, onOpenDocument }: Props) {
                 <span className="block truncate text-sm font-medium text-ink">{item.title || 'Sans titre'}</span>
                 {item.excerpt && (
                   <span
-                    className="mt-0.5 line-clamp-2 block text-xs text-ink-soft [&_mark]:rounded-sm [&_mark]:bg-yellow-200 [&_mark]:px-0.5"
+                    className="mt-0.5 line-clamp-2 block text-xs text-ink-soft [&_mark]:rounded-sm [&_mark]:bg-highlight text-ink [&_mark]:px-0.5"
                     dangerouslySetInnerHTML={{ __html: sanitizeExcerpt(item.excerpt) }}
                   />
                 )}

@@ -41,11 +41,11 @@ export default function AppShell({ route, children }: Props) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white font-sans text-ink antialiased">
+    <div className="flex h-screen overflow-hidden bg-surface font-sans text-ink antialiased">
       {sidebarOpen && (
         <>
           {/* Sur mobile, la barre latérale passe en surimpression */}
-          <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-30 bg-[var(--scrim)] md:hidden" onClick={() => setOpen(false)} />
           <div className="fixed inset-y-0 left-0 z-40 md:static md:z-auto">
             <Sidebar route={route} onCollapse={() => setOpen(false)} onOpenSearch={() => setSearchOpen(true)} />
           </div>

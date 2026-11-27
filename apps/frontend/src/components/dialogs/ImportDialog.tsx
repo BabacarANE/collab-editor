@@ -63,7 +63,7 @@ export default function ImportDialog({ workspaceId, onClose, onImported }: Props
           e.target.value = ''
         }}
       />
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
     </Modal>
   )
 }

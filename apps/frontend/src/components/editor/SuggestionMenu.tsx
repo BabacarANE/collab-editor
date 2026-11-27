@@ -48,7 +48,7 @@ const SuggestionMenu = forwardRef<SuggestionMenuHandle, Props>(({ items, command
   }), [items, selected, command])
 
   return (
-    <div ref={listRef} className="max-h-80 w-72 overflow-y-auto rounded-lg bg-white p-1 shadow-pop">
+    <div ref={listRef} className="max-h-80 w-72 overflow-y-auto rounded-lg bg-raised p-1 shadow-pop">
       {items.length === 0 ? (
         <div className="px-3 py-2 text-sm text-ink-muted">{emptyLabel}</div>
       ) : items.map((item, index) => (
@@ -60,7 +60,7 @@ const SuggestionMenu = forwardRef<SuggestionMenuHandle, Props>(({ items, command
           className={`flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left cursor-pointer ${index === selected ? 'bg-hover' : ''}`}
         >
           {item.icon && (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-white text-ink-soft">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-ink-soft">
               {item.icon}
             </span>
           )}

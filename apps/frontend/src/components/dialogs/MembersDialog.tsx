@@ -59,12 +59,12 @@ export default function MembersDialog({ workspace, onClose }: Props) {
             value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="Adresse e-mail"
-            className="h-9 flex-1 rounded-md border border-line-strong px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft"
+            className="h-9 flex-1 rounded-md border border-control px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           />
           <select
             value={role}
             onChange={e => setRole(e.target.value as WorkspaceRole)}
-            className="h-9 rounded-md border border-line-strong bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-control bg-surface px-2 text-sm"
           >
             <option value="MEMBER">Membre</option>
             <option value="ADMIN">Admin</option>
@@ -73,7 +73,7 @@ export default function MembersDialog({ workspace, onClose }: Props) {
         </form>
       )}
 
-      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       <ul className="-mx-2">
         {members.map(m => (
@@ -89,7 +89,7 @@ export default function MembersDialog({ workspace, onClose }: Props) {
               <button
                 onClick={() => remove(m.user.id)}
                 title="Retirer du workspace"
-                className="rounded-md p-1.5 text-ink-muted opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 cursor-pointer"
+                className="rounded-md p-1.5 text-ink-muted opacity-0 hover:bg-danger-soft hover:text-danger group-hover:opacity-100 cursor-pointer"
               >
                 <UserMinus size={16} />
               </button>

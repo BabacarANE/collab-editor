@@ -71,7 +71,7 @@ export default function HomePage({ sidebarOpen, openSidebar }: Props) {
                 </h1>
                 <p className="mb-5 text-sm text-ink-soft">Démarrer un nouveau document</p>
                 <button onClick={newDocument} className="group w-36 text-left cursor-pointer" disabled={!workspace}>
-                  <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-line-strong bg-white transition-colors group-hover:border-accent">
+                  <div className="flex aspect-[3/4] items-center justify-center rounded-md border border-line-strong bg-surface transition-colors group-hover:border-accent">
                     <Plus size={44} strokeWidth={1.25} className="text-accent" />
                   </div>
                   <div className="mt-2 text-sm font-medium text-ink">Document vierge</div>
@@ -83,7 +83,7 @@ export default function HomePage({ sidebarOpen, openSidebar }: Props) {
             <section className="mx-auto max-w-5xl px-6 py-8">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-base font-medium text-ink">Documents récents</h2>
-                <label className="flex h-9 w-full max-w-xs items-center gap-2 rounded-md border border-line-strong px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft sm:w-64">
+                <label className="flex h-9 w-full max-w-xs items-center gap-2 rounded-md border border-control px-3 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30 sm:w-64">
                   <Search size={15} className="text-ink-muted" />
                   <input
                     value={query}
@@ -94,7 +94,7 @@ export default function HomePage({ sidebarOpen, openSidebar }: Props) {
                 </label>
               </div>
 
-              {error && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+              {error && <p className="mb-4 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
               {loading && documents.length === 0 ? (
                 <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
@@ -115,7 +115,7 @@ export default function HomePage({ sidebarOpen, openSidebar }: Props) {
                       className="group overflow-hidden rounded-md border border-line-strong text-left transition-colors hover:border-accent cursor-pointer"
                     >
                       {/* Vignette stylisée de la page */}
-                      <div className="aspect-[4/3] border-b border-line bg-white px-4 pt-4">
+                      <div className="aspect-[4/3] border-b border-line bg-surface px-4 pt-4">
                         <div className="mb-2 h-2 w-3/4 rounded bg-line-strong" />
                         {[90, 100, 80, 95, 60].map((w, i) => (
                           <div key={i} className="mb-1.5 h-1.5 rounded bg-line" style={{ width: `${w}%` }} />

@@ -3,6 +3,7 @@ import { useAuthStore } from './store/authStore'
 import { useWorkspaceStore } from './store/workspaceStore'
 import { useRoute } from './lib/router'
 import AppShell from './components/layout/AppShell'
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
@@ -16,7 +17,12 @@ export default function App() {
     if (!user) useWorkspaceStore.getState().reset()
   }, [user])
 
-  if (!user) return <LoginPage />
+  // Visiteur : présentation du site, puis connexion ou inscription
+  if (!user) {
+    if (route.name === 'login') return <LoginPage key="login" />
+    if (route.name === 'register') return <LoginPage key="register" initialRegister />
+    return <LandingPage />
+  }
 
   return (
     <AppShell route={route}>

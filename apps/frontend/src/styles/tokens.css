@@ -1,0 +1,135 @@
+/* Hallmark · genre: modern-minimal · theme: custom (vibe: "teal calme, papier froid, utilitaire")
+ * paper oklch(99% 0.003 200) · accent oklch(46% 0.10 192) teal · Geist + Geist Mono
+ * axes: paper-band light+dark / display geometric-sans / accent-hue cool (teal)
+ *
+ * Chaque token est un triplet « L C H » consommé par Tailwind via
+ *   oklch(var(--c-xxx) / <alpha-value>)
+ * La teinte d'ancrage (200) ne change jamais entre clair et sombre : seules la
+ * luminosité et la chroma bougent. Surfaces plus hautes = plus claires en sombre.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --c-surface: 99% 0.003 200;   /* page, cartes, champs */
+  --c-raised: 99% 0.003 200;    /* menus, modales (au-dessus de la surface) */
+  --c-canvas: 96% 0.006 200;    /* fond derrière la page de l'éditeur */
+  --c-sidebar: 97.5% 0.005 200;
+
+  /* Texte */
+  --c-ink: 21% 0.012 200;
+  --c-ink-soft: 42% 0.012 200;
+  --c-ink-muted: 50% 0.010 200;  /* >= 4.5:1 sur surface et canvas */
+
+  /* Traits */
+  --c-line: 92% 0.006 200;
+  --c-line-strong: 85% 0.008 200;
+  --c-control: 66% 0.010 200;    /* bordure des champs, >= 3:1 (WCAG 1.4.11) */
+
+  /* Accent unique */
+  --c-accent: 46% 0.10 192;
+  --c-accent-hover: 40% 0.09 192;
+  --c-accent-soft: 94% 0.03 192;
+  --c-accent-ink: 99% 0.003 200; /* texte posé sur l'accent */
+
+  /* États sémantiques (jamais l'accent) */
+  --c-danger: 50% 0.19 27;
+  --c-danger-soft: 96% 0.025 25;
+  --c-success: 46% 0.12 155;
+  --c-success-soft: 95% 0.04 155;
+  --c-warning: 50% 0.12 70;
+  --c-warning-soft: 96% 0.05 90;
+  --c-highlight: 91% 0.10 95;    /* surlignage de texte (<mark>) */
+
+  /* Survol : voile d'encre, jamais une couleur opaque inventée */
+  --c-hover: 21% 0.012 200;
+  --hover-alpha: 0.06;
+
+  /* Ombres teintées sur la teinte d'ancrage */
+  --shadow-page: 0 1px 2px oklch(21% 0.012 200 / 0.10), 0 4px 16px oklch(21% 0.012 200 / 0.06);
+  --shadow-pop: 0 0 0 1px oklch(21% 0.012 200 / 0.06), 0 4px 8px oklch(21% 0.012 200 / 0.08), 0 12px 32px oklch(21% 0.012 200 / 0.14);
+  --scrim: oklch(21% 0.012 200 / 0.42);
+
+  /* Mouvement */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+}
+
+/* Mode sombre — explicite (data-theme="dark") ou suivi du système sans choix explicite */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-surface: 21% 0.010 200;
+  --c-raised: 25% 0.011 200;
+  --c-canvas: 16% 0.008 200;
+  --c-sidebar: 18.5% 0.009 200;
+
+  --c-ink: 93% 0.006 200;
+  --c-ink-soft: 77% 0.008 200;
+  --c-ink-muted: 67% 0.008 200;
+
+  --c-line: 29% 0.010 200;
+  --c-line-strong: 37% 0.011 200;
+  --c-control: 56% 0.012 200;
+
+  --c-accent: 76% 0.11 192;
+  --c-accent-hover: 82% 0.11 192;
+  --c-accent-soft: 30% 0.05 192;
+  --c-accent-ink: 18% 0.02 200;
+
+  --c-danger: 72% 0.16 25;
+  --c-danger-soft: 28% 0.07 25;
+  --c-success: 74% 0.13 155;
+  --c-success-soft: 28% 0.06 155;
+  --c-warning: 78% 0.12 80;
+  --c-warning-soft: 30% 0.06 80;
+  --c-highlight: 42% 0.08 95;
+
+  --c-hover: 95% 0.006 200;
+  --hover-alpha: 0.07;
+
+  --shadow-page: 0 0 0 1px oklch(100% 0 0 / 0.04), 0 8px 28px oklch(0% 0 0 / 0.35);
+  --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 8px 32px oklch(0% 0 0 / 0.5);
+  --scrim: oklch(8% 0.008 200 / 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --c-surface: 21% 0.010 200;
+    --c-raised: 25% 0.011 200;
+    --c-canvas: 16% 0.008 200;
+    --c-sidebar: 18.5% 0.009 200;
+
+    --c-ink: 93% 0.006 200;
+    --c-ink-soft: 77% 0.008 200;
+    --c-ink-muted: 67% 0.008 200;
+
+    --c-line: 29% 0.010 200;
+    --c-line-strong: 37% 0.011 200;
+    --c-control: 56% 0.012 200;
+
+    --c-accent: 76% 0.11 192;
+    --c-accent-hover: 82% 0.11 192;
+    --c-accent-soft: 30% 0.05 192;
+    --c-accent-ink: 18% 0.02 200;
+
+    --c-danger: 72% 0.16 25;
+    --c-danger-soft: 28% 0.07 25;
+    --c-success: 74% 0.13 155;
+    --c-success-soft: 28% 0.06 155;
+    --c-warning: 78% 0.12 80;
+    --c-warning-soft: 30% 0.06 80;
+    --c-highlight: 42% 0.08 95;
+
+    --c-hover: 95% 0.006 200;
+    --hover-alpha: 0.07;
+
+    --shadow-page: 0 0 0 1px oklch(100% 0 0 / 0.04), 0 8px 28px oklch(0% 0 0 / 0.35);
+    --shadow-pop: 0 0 0 1px oklch(100% 0 0 / 0.08), 0 8px 32px oklch(0% 0 0 / 0.5);
+    --scrim: oklch(8% 0.008 200 / 0.6);
+  }
+}

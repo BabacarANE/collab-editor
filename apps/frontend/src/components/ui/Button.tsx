@@ -3,10 +3,10 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent-hover shadow-sm',
-  secondary: 'bg-white text-ink border border-line-strong hover:bg-hover',
+  primary: 'bg-accent text-accent-ink hover:bg-accent-hover',
+  secondary: 'bg-surface text-ink border border-line-strong hover:bg-hover hover:border-control',
   ghost: 'text-ink-soft hover:bg-hover hover:text-ink',
-  danger: 'bg-white text-red-600 border border-red-200 hover:bg-red-50',
+  danger: 'bg-surface text-danger border border-danger/30 hover:bg-danger-soft',
 }
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,7 +20,7 @@ export function Button({ variant = 'secondary', size = 'md', icon, className = '
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center rounded-md font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${sizing} ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-md font-medium transition-colors ease-out active:translate-y-px disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${sizing} ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {icon}

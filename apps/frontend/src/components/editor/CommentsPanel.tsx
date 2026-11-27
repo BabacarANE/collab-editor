@@ -36,7 +36,7 @@ function Composer({ placeholder, onSubmit, onCancel, autoFocus }: {
   }
 
   return (
-    <div className="rounded-lg border border-line-strong bg-white focus-within:border-accent focus-within:ring-2 focus-within:ring-accent-soft">
+    <div className="rounded-lg border border-line-strong bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
       <textarea
         autoFocus={autoFocus}
         value={text}
@@ -68,7 +68,7 @@ export default function CommentsPanel({
   const visible = showResolved ? comments : open
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-line bg-white animate-slide-in">
+    <aside className="flex w-80 shrink-0 flex-col border-l border-line bg-surface animate-slide-in">
       <div className="flex h-12 items-center justify-between border-b border-line px-4">
         <span className="text-sm font-semibold text-ink">Commentaires</span>
         <button onClick={onClose} aria-label="Fermer" className="rounded-md p-1 text-ink-muted hover:bg-hover hover:text-ink cursor-pointer">
@@ -89,7 +89,7 @@ export default function CommentsPanel({
         {visible.map(c => {
           const canDelete = c.author.id === currentUserId || canDeleteAll
           return (
-            <article key={c.id} className={`rounded-lg border bg-white p-3 shadow-sm ${c.resolved ? 'border-line opacity-60' : 'border-line'}`}>
+            <article key={c.id} className={`rounded-lg border bg-surface p-3 ${c.resolved ? 'border-line opacity-60' : 'border-line'}`}>
               <header className="mb-2 flex items-start gap-2">
                 <Avatar email={c.author.email} id={c.author.id} size={28} />
                 <div className="min-w-0 flex-1">
@@ -102,7 +102,7 @@ export default function CommentsPanel({
                   </button>
                 )}
                 {canDelete && (
-                  <button onClick={() => onDelete(c.id)} title="Supprimer" className="rounded-md p-1 text-ink-muted hover:bg-red-50 hover:text-red-600 cursor-pointer">
+                  <button onClick={() => onDelete(c.id)} title="Supprimer" className="rounded-md p-1 text-ink-muted hover:bg-danger-soft hover:text-danger cursor-pointer">
                     <Trash2 size={15} />
                   </button>
                 )}
@@ -127,7 +127,7 @@ export default function CommentsPanel({
               )}
 
               {c.resolved ? (
-                <div className="mt-2 flex items-center gap-1 text-xs text-emerald-600"><Check size={12} /> Résolu</div>
+                <div className="mt-2 flex items-center gap-1 text-xs text-success"><Check size={12} /> Résolu</div>
               ) : canComment && (
                 replyTo === c.id ? (
                   <div className="mt-3">
